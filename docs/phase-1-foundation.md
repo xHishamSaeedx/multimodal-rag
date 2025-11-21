@@ -86,20 +86,179 @@ Phase 1 establishes the foundational infrastructure and implements a minimal via
 
 - **Technology Choice**: Qdrant (recommended) or ChromaDB for simplicity
 - **Collections**:
+
   - `text_chunks`: Stores embeddings for text chunks
   - Each vector: 384-768 dimensions (depending on embedding model)
   - Payload includes: `chunk_id`, `document_id`, `text`, `metadata`
 
+- **Setup Instructions**:
+
+  1. Start Qdrant service (if not already running):
+
+     ```bash
+     docker-compose up -d qdrant
+     ```
+
+  2. Verify Qdrant is accessible:
+
+     ```bash
+     curl http://localhost:6333/health
+     ```
+
+     Or visit the dashboard: http://localhost:6333/dashboard
+
+  3. Install Python client:
+
+     ```bash
+     pip install qdrant-client
+     ```
+
+  4. Initialize the collection:
+     ```bash
+     python scripts/init_qdrant.py
+     ```
+     - Default: Creates `text_chunks` collection with **768 dimensions** (for e5-base-v2/all-mpnet-base-v2 - best quality)
+     - For 384 dimensions (faster): `python scripts/init_qdrant.py --vector-size 384`
+     - See `scripts/README.md` for more options
+     - **Performance**: 768 dimensions supports sub-second retrieval (< 200-300ms)
+
+  The collection will be ready to store embeddings after initialization.
+
 #### Sparse Index (BM25)
 
-- **Technology Choice**:
-  - **Option A**: Elasticsearch (production-ready, more setup)
-  - **Option B**: `rank-bm25` Python library (simpler, good for MVP)
-  - **Option C**: `whoosh` (pure Python, lightweight)
+- **Technology Choice**: **Elasticsearch** (production-ready, enterprise-grade)
+
+  - Elasticsearch provides industry-standard BM25 search with advanced features
+  - Production-tested at scale with excellent performance
+  - Rich query capabilities (full-text, filters, aggregations)
+  - Persistent index storage with high availability options
+  - Industry-recognized technology that demonstrates enterprise system design
+
 - **Indexed Fields**:
-  - Chunk text
-  - Document metadata (title, tags)
-  - Filename
+  - Chunk text (full-text search with BM25 scoring)
+  - Document metadata (title, tags, author, version)
+  - Filename and document ID
+  - Timestamps (created_at, updated_at)
+- **Setup Instructions** (Step-by-Step):
+
+  **Step 1**: Start Elasticsearch service
+
+  Elasticsearch is already configured in `docker-compose.yml`. Start it with:
+
+  ```bash
+  docker-compose up -d elasticsearch
+  ```
+
+  ⚠️ **Note**: Elasticsearch may take 30-60 seconds to fully start on first run (it needs to initialize). The container will be "running" but Elasticsearch itself needs time to become ready.
+
+  **Step 2**: Verify Elasticsearch is running
+
+  Wait a moment, then check if Elasticsearch is ready:
+
+  ```bash
+  curl http://localhost:9200/_cluster/health
+  ```
+
+  Expected response:
+
+  ```json
+  {
+    "cluster_name": "docker-cluster",
+    "status": "yellow",
+    "timed_out": false,
+    ...
+  }
+  ```
+
+  - `"status": "yellow"` is normal for single-node setup (means primary shards are allocated)
+  - `"status": "green"` is ideal but not required for single-node
+  - `"status": "red"` means there's a problem
+
+  **Alternative verification** (if curl doesn't work):
+
+  ```bash
+  # Check if container is running
+  docker ps | grep elasticsearch
+
+  # Check container logs
+  docker logs multimodal-rag-elasticsearch
+  ```
+
+  Or visit in browser: http://localhost:9200 (should return cluster info)
+
+  **Step 3**: Install Python Elasticsearch client
+
+  ```bash
+  pip install "elasticsearch>=8.0.0,<9.0.0"
+  ```
+
+  **Important**: Use Elasticsearch client version 8.x to match the Elasticsearch 8.11.0 server.
+  Client version 9.x is incompatible (uses protocol version 9, server only supports 7-8).
+
+  Or add to your `requirements.txt`:
+
+  ```
+  elasticsearch>=8.0.0
+  ```
+
+  **Step 4**: Initialize the Elasticsearch index
+
+  Run the initialization script to create the `text_chunks` index:
+
+  ```bash
+  python scripts/init_elasticsearch.py
+  ```
+
+  This will:
+
+  - Create the `text_chunks` index with proper mappings
+  - Configure BM25 similarity scoring (default, but explicit)
+  - Set up standard analyzer for tokenization
+  - Define all metadata fields for filtering
+  - Verify the index is ready
+
+  **Expected output**:
+
+  ```
+  Connecting to Elasticsearch at http://localhost:9200...
+  ✓ Connected to Elasticsearch successfully!
+  Creating index 'text_chunks' with BM25 similarity...
+  ✓ Index 'text_chunks' created successfully!
+  ✓ Index 'text_chunks' is ready.
+    - Status: yellow
+    - Shards: 1
+    - Similarity: BM25
+    - Analyzer: standard (for BM25)
+  ```
+
+  **Step 5**: (Optional) Verify the index was created
+
+  ```bash
+  # Check index exists
+  curl http://localhost:9200/text_chunks
+
+  # Or test with Python
+  python -c "from elasticsearch import Elasticsearch; es = Elasticsearch([{'host': 'localhost', 'port': 9200}]); print('Index exists:', es.indices.exists(index='text_chunks'))"
+  ```
+
+  **Index Configuration Summary**:
+
+  - Index name: `text_chunks`
+  - Similarity: BM25 (k1=1.2, b=0.75)
+  - Analyzer: `standard` (for tokenization)
+  - Shards: 1 (optimized for single-node)
+  - Replicas: 0 (single-node setup)
+  - Indexed fields:
+    - `chunk_text`: Full-text search (primary BM25 field)
+    - `chunk_id`, `document_id`: Keywords (exact match, filtering)
+    - `filename`, `document_type`: Searchable and filterable
+    - `metadata`: Object with nested fields (title, tags, author, etc.)
+    - `created_at`, `updated_at`: Date fields
+
+- **Performance**:
+  - Query latency: 10-50ms for typical searches (1k-100k documents)
+  - Indexing speed: 1000-5000 documents/second (depends on document size)
+  - Memory: ~512MB allocated (configurable in docker-compose.yml)
 
 ---
 
@@ -138,11 +297,35 @@ Generate Embeddings → Store in Vector DB → Index in BM25 → Done
 
 - **Phase 1 Options**:
   - **Option A**: `sentence-transformers/all-MiniLM-L6-v2` (384 dim, fast, good quality)
+    - Embedding time: ~10-30ms per query (CPU), ~2-5ms (GPU)
+    - Best for: Rapid prototyping, large-scale deployments
   - **Option B**: `sentence-transformers/all-mpnet-base-v2` (768 dim, better quality)
-  - **Option C**: `intfloat/e5-base-v2` (768 dim, state-of-the-art)
+    - Embedding time: ~30-80ms per query (CPU), ~5-15ms (GPU)
+    - Best for: Balance of quality and speed
+  - **Option C**: `intfloat/e5-base-v2` (768 dim, state-of-the-art) ⭐ **Recommended**
+    - Embedding time: ~40-100ms per query (CPU), ~8-20ms (GPU)
+    - Best for: Maximum accuracy, production-ready
+    - **Performance**: Supports sub-second retrieval (< 200-300ms for vector search + BM25)
 - **Service Type**:
   - Start as Python function/library calls
   - Later refactor to REST API (Phase 2)
+
+#### Performance Notes for Sub-Second Retrievals
+
+**With 768 dimensions (e5-base-v2)**, typical retrieval latency breakdown:
+
+- Query embedding generation: 40-100ms (CPU) / 8-20ms (GPU)
+- Vector search in Qdrant: 10-50ms (even with 768 dim - very fast!)
+- BM25 search (Elasticsearch): 10-30ms
+- Result merging & deduplication: 5-10ms
+- **Total retrieval time: ~65-190ms** ✅ Well under 1 second
+
+**Tips for sub-second retrieval:**
+
+- Use GPU for embedding generation (10-20x faster)
+- Qdrant handles 768-dim vectors efficiently (minimal overhead vs 384)
+- Parallel retrieval (vector + BM25 simultaneously) reduces latency
+- Consider embedding caching for repeated queries
 
 #### Embedding Generation
 
@@ -340,8 +523,8 @@ Generate Embeddings → Store in Vector DB → Index in BM25 → Done
 ### Storage
 
 - **Supabase** (document store - PostgreSQL-based with JSONB)
-- **Qdrant** or **ChromaDB** (vector DB)
-- **Elasticsearch** or **rank-bm25** (BM25)
+- **Qdrant** (vector DB)
+- **Elasticsearch** (BM25 sparse index)
 - **MinIO** or local filesystem (raw storage)
 
 ### ML/AI Libraries
@@ -429,11 +612,15 @@ Generate Embeddings → Store in Vector DB → Index in BM25 → Done
 - [ ] Create Supabase project at [app.supabase.com](https://app.supabase.com)
 - [ ] Get Supabase credentials (URL, anon key, service role key, DB password)
 - [ ] Copy `.env.example` to `.env` and fill in credentials
-- [ ] Configure Docker Compose services (Qdrant, Elasticsearch, MinIO)
-- [ ] Start Docker services: `docker-compose up -d`
+- [ ] Start Docker services: `docker-compose up -d` (Qdrant, Elasticsearch, MinIO are already configured)
+- [ ] Verify services are running:
+  - Qdrant: `curl http://localhost:6333/health`
+  - Elasticsearch: `curl http://localhost:9200/_cluster/health`
+  - MinIO: http://localhost:9090 (console UI)
 - [ ] Create database tables in Supabase SQL Editor (see schema above)
-- [ ] Initialize Qdrant collections
-- [ ] Initialize Elasticsearch index
+- [ ] Install Python dependencies: `pip install qdrant-client elasticsearch`
+- [ ] Initialize Qdrant collection: `python scripts/init_qdrant.py`
+- [ ] Initialize Elasticsearch index: `python scripts/init_elasticsearch.py`
 
 ### First Milestone
 
