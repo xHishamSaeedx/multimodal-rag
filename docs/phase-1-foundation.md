@@ -37,7 +37,26 @@ Phase 1 establishes the foundational infrastructure and implements a minimal via
 
 #### Processed Document Store
 
-- **Technology Choice**: PostgreSQL with JSONB columns (or SQLite for MVP)
+- **Technology Choice**: **Supabase** (PostgreSQL-based with JSONB support)
+
+  - Supabase provides PostgreSQL with additional features (REST API, Auth, Real-time)
+  - Full JSONB support for flexible metadata storage
+  - Auto-generated REST API for easy integration
+  - Built-in authentication ready for Phase 2+
+  - Free tier available at [supabase.com](https://supabase.com)
+
+- **Setup Instructions**:
+
+  1. Create a new project at [app.supabase.com](https://app.supabase.com)
+  2. Go to **Project Settings > API** to get:
+     - Project URL (e.g., `https://xxxxx.supabase.co`)
+     - `anon` key (public key, safe for client-side)
+     - `service_role` key (secret, server-side only - keep secure!)
+  3. Add these credentials to your `.env` file (see `.env.example`):
+     - `SUPABASE_URL`
+     - `SUPABASE_ANON_KEY`
+     - `SUPABASE_SERVICE_ROLE_KEY`
+
 - **Schema**:
 
   ```sql
@@ -213,12 +232,14 @@ Generate Embeddings → Store in Vector DB → Index in BM25 → Done
 1. **Day 1-2**: Set up development environment
 
    - Python virtual environment
-   - Docker Compose for services (PostgreSQL, Qdrant, Elasticsearch/MinIO)
+   - Set up Supabase project (cloud-based PostgreSQL)
+   - Docker Compose for services (Qdrant, Elasticsearch, MinIO)
    - Project structure
+   - Configure environment variables (.env file)
 
 2. **Day 3-4**: Database schemas
 
-   - Create PostgreSQL tables
+   - Create Supabase tables (via SQL Editor or migrations)
    - Set up Qdrant collections
    - Set up BM25 index structure
 
@@ -318,7 +339,7 @@ Generate Embeddings → Store in Vector DB → Index in BM25 → Done
 
 ### Storage
 
-- **PostgreSQL** (document store)
+- **Supabase** (document store - PostgreSQL-based with JSONB)
 - **Qdrant** or **ChromaDB** (vector DB)
 - **Elasticsearch** or **rank-bm25** (BM25)
 - **MinIO** or local filesystem (raw storage)
@@ -405,9 +426,14 @@ Generate Embeddings → Store in Vector DB → Index in BM25 → Done
 - [ ] Clone/create project structure
 - [ ] Set up virtual environment
 - [ ] Install dependencies
-- [ ] Configure Docker Compose services
-- [ ] Set up environment variables
-- [ ] Initialize databases
+- [ ] Create Supabase project at [app.supabase.com](https://app.supabase.com)
+- [ ] Get Supabase credentials (URL, anon key, service role key, DB password)
+- [ ] Copy `.env.example` to `.env` and fill in credentials
+- [ ] Configure Docker Compose services (Qdrant, Elasticsearch, MinIO)
+- [ ] Start Docker services: `docker-compose up -d`
+- [ ] Create database tables in Supabase SQL Editor (see schema above)
+- [ ] Initialize Qdrant collections
+- [ ] Initialize Elasticsearch index
 
 ### First Milestone
 
@@ -471,6 +497,8 @@ Once Phase 1 is complete and validated, proceed to:
 
 ## Resources & References
 
+- [Supabase Documentation](https://supabase.com/docs)
+- [Supabase PostgreSQL Guide](https://supabase.com/docs/guides/database)
 - [Qdrant Documentation](https://qdrant.tech/documentation/)
 - [Sentence Transformers](https://www.sbert.net/)
 - [FastAPI Documentation](https://fastapi.tiangolo.com/)
