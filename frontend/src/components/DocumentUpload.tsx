@@ -1,0 +1,290 @@
+import React, { useState, useCallback, useRef } from 'react';
+import { api, IngestResponse } from '../services/api';
+import './DocumentUpload.css';
+
+interface UploadResult extends IngestResponse {
+  file?: File;
+}
+
+const DocumentUpload: React.FC = () => {
+  const [isDragging, setIsDragging] = useState(false);
+  const [isUploading, setIsUploading] = useState(false);
+  const [uploadResults, setUploadResults] = useState<UploadResult[]>([]);
+  const [error, setError] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const supportedTypes = ['.pdf', '.docx', '.txt', '.md', '.markdown'];
+  const maxFileSize = 50 * 1024 * 1024; // 50MB
+
+  const validateFile = (file: File): string | null => {
+    const ext = '.' + file.name.split('.').pop()?.toLowerCase();
+    
+    if (!supportedTypes.includes(ext)) {
+      return `Unsupported file type. Supported types: ${supportedTypes.join(', ')}`;
+    }
+
+    if (file.size > maxFileSize) {
+      return `File size exceeds maximum of ${maxFileSize / (1024 * 1024)}MB`;
+    }
+
+    return null;
+  };
+
+  const uploadFile = async (file: File) => {
+    const validationError = validateFile(file);
+    if (validationError) {
+      throw new Error(validationError);
+    }
+
+    try {
+      const result = await api.uploadDocument(file);
+      return { ...result, file };
+    } catch (err: any) {
+      const errorMessage = err.response?.data?.error || err.response?.data?.detail?.error || err.message || 'Upload failed';
+      throw new Error(errorMessage);
+    }
+  };
+
+  const handleFiles = useCallback(async (files: FileList | null) => {
+    if (!files || files.length === 0) return;
+
+    setIsUploading(true);
+    setError(null);
+    const newResults: UploadResult[] = [];
+
+    try {
+      // Process files sequentially to avoid overwhelming the server
+      for (let i = 0; i < files.length; i++) {
+        const file = files[i];
+        try {
+          const result = await uploadFile(file);
+          newResults.push(result);
+          setUploadResults((prev) => [...prev, result]);
+        } catch (err: any) {
+          const errorResult: UploadResult = {
+            success: false,
+            message: err.message || 'Upload failed',
+            file_name: file.name,
+            file_type: 'unknown',
+            file_size: file.size,
+            extracted_text_length: 0,
+            extracted_at: new Date().toISOString(),
+            file,
+          };
+          newResults.push(errorResult);
+          setUploadResults((prev) => [...prev, errorResult]);
+        }
+      }
+    } catch (err: any) {
+      setError(err.message || 'An unexpected error occurred');
+    } finally {
+      setIsUploading(false);
+    }
+  }, []);
+
+  const handleDragEnter = useCallback((e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragging(true);
+  }, []);
+
+  const handleDragLeave = useCallback((e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragging(false);
+  }, []);
+
+  const handleDragOver = useCallback((e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+  }, []);
+
+  const handleDrop = useCallback(
+    (e: React.DragEvent) => {
+      e.preventDefault();
+      e.stopPropagation();
+      setIsDragging(false);
+      handleFiles(e.dataTransfer.files);
+    },
+    [handleFiles]
+  );
+
+  const handleFileInput = useCallback(
+    (e: React.ChangeEvent<HTMLInputElement>) => {
+      handleFiles(e.target.files);
+      // Reset input to allow re-uploading the same file
+      if (fileInputRef.current) {
+        fileInputRef.current.value = '';
+      }
+    },
+    [handleFiles]
+  );
+
+  const handleButtonClick = () => {
+    fileInputRef.current?.click();
+  };
+
+  const formatFileSize = (bytes: number): string => {
+    if (bytes === 0) return '0 Bytes';
+    const k = 1024;
+    const sizes = ['Bytes', 'KB', 'MB', 'GB'];
+    const i = Math.floor(Math.log(bytes) / Math.log(k));
+    return Math.round(bytes / Math.pow(k, i) * 100) / 100 + ' ' + sizes[i];
+  };
+
+  const formatDate = (dateString: string): string => {
+    return new Date(dateString).toLocaleString();
+  };
+
+  const clearResults = () => {
+    setUploadResults([]);
+    setError(null);
+  };
+
+  return (
+    <div className="document-upload-container">
+      <div className="upload-section">
+        <h1>Document Upload</h1>
+        <p className="upload-description">
+          Upload documents to extract and index text. Supported formats: PDF, DOCX, TXT, MD
+        </p>
+
+        <div
+          className={`upload-zone ${isDragging ? 'dragging' : ''} ${isUploading ? 'uploading' : ''}`}
+          onDragEnter={handleDragEnter}
+          onDragLeave={handleDragLeave}
+          onDragOver={handleDragOver}
+          onDrop={handleDrop}
+        >
+          <div className="upload-content">
+            <svg className="upload-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+              <polyline points="14 2 14 8 20 8"></polyline>
+              <line x1="16" y1="13" x2="8" y2="13"></line>
+              <line x1="16" y1="17" x2="8" y2="17"></line>
+              <polyline points="10 9 9 9 8 9"></polyline>
+            </svg>
+            {isUploading ? (
+              <div>
+                <div className="spinner"></div>
+                <p>Uploading and processing...</p>
+              </div>
+            ) : (
+              <>
+                <p className="upload-text">
+                  Drag and drop files here, or{' '}
+                  <button
+                    type="button"
+                    className="link-button"
+                    onClick={handleButtonClick}
+                  >
+                    browse
+                  </button>
+                </p>
+                <p className="upload-hint">
+                  Supported: {supportedTypes.join(', ')} (Max: {formatFileSize(maxFileSize)})
+                </p>
+              </>
+            )}
+          </div>
+          <input
+            ref={fileInputRef}
+            type="file"
+            multiple
+            accept={supportedTypes.join(',')}
+            onChange={handleFileInput}
+            className="file-input"
+            disabled={isUploading}
+          />
+        </div>
+
+        {error && (
+          <div className="error-message">
+            <strong>Error:</strong> {error}
+          </div>
+        )}
+      </div>
+
+      {uploadResults.length > 0 && (
+        <div className="results-section">
+          <div className="results-header">
+            <h2>Upload Results</h2>
+            <button
+              type="button"
+              className="clear-button"
+              onClick={clearResults}
+            >
+              Clear
+            </button>
+          </div>
+
+          <div className="results-list">
+            {uploadResults.map((result, index) => (
+              <div
+                key={index}
+                className={`result-card ${result.success ? 'success' : 'error'}`}
+              >
+                <div className="result-header">
+                  <div className="result-status">
+                    {result.success ? (
+                      <svg className="status-icon success" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                        <polyline points="20 6 9 17 4 12"></polyline>
+                      </svg>
+                    ) : (
+                      <svg className="status-icon error" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                        <line x1="18" y1="6" x2="6" y2="18"></line>
+                        <line x1="6" y1="6" x2="18" y2="18"></line>
+                      </svg>
+                    )}
+                    <span className="file-name">{result.file_name}</span>
+                  </div>
+                  <span className={`status-badge ${result.success ? 'success' : 'error'}`}>
+                    {result.success ? 'Success' : 'Failed'}
+                  </span>
+                </div>
+
+                <div className="result-details">
+                  <p className="result-message">{result.message}</p>
+
+                  {result.success && (
+                    <div className="result-meta">
+                      <div className="meta-item">
+                        <strong>Type:</strong> {result.file_type.toUpperCase()}
+                      </div>
+                      <div className="meta-item">
+                        <strong>Size:</strong> {formatFileSize(result.file_size)}
+                      </div>
+                      {result.page_count && (
+                        <div className="meta-item">
+                          <strong>Pages:</strong> {result.page_count}
+                        </div>
+                      )}
+                      <div className="meta-item">
+                        <strong>Text Length:</strong> {result.extracted_text_length.toLocaleString()} characters
+                      </div>
+                      <div className="meta-item">
+                        <strong>Extracted At:</strong> {formatDate(result.extracted_at)}
+                      </div>
+                    </div>
+                  )}
+
+                  {result.metadata && Object.keys(result.metadata).length > 0 && (
+                    <details className="metadata-details">
+                      <summary>Metadata</summary>
+                      <pre className="metadata-content">
+                        {JSON.stringify(result.metadata, null, 2)}
+                      </pre>
+                    </details>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};
+
+export default DocumentUpload;
+

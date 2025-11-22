@@ -1,0 +1,30 @@
+.App {
+  min-height: 100vh;
+  width: 100%;
+  position: relative;
+}
+
+.upload-section {
+  background-color: #fafafa;
+  padding: 6rem 2rem;
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+}
+
+.documents-section {
+  background-color: #ffffff;
+  padding: 6rem 2rem;
+  min-height: 100vh;
+}
+
+@media (max-width: 768px) {
+  .upload-section {
+    padding: 4rem 1rem;
+  }
+
+  .documents-section {
+    padding: 4rem 1rem;
+  }
+}
+

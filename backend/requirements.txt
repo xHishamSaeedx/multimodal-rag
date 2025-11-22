@@ -1,20 +1,30 @@
 # Backend Python dependencies
-# This file will be populated with actual dependencies
 
 # FastAPI and web server
-# fastapi>=0.104.0
-# uvicorn[standard]>=0.24.0
-# pydantic>=2.0.0
+fastapi>=0.104.0
+uvicorn[standard]>=0.24.0
+pydantic>=2.0.0
+pydantic-settings>=2.0.0
+python-multipart>=0.0.6  # Required for file uploads
 
 # Database clients
-# qdrant-client>=1.7.0
+qdrant-client>=1.7.0  # Vector database
 # elasticsearch>=8.0.0,<9.0.0
-# supabase>=2.0.0
+supabase>=2.0.0  # PostgreSQL-based document store
 
 # ML/AI libraries
-# sentence-transformers>=2.2.0
-# torch>=2.0.0
+sentence-transformers>=2.2.0  # Embeddings (e5-base-v2, etc.)
+torch>=2.0.0  # Required by sentence-transformers
+
+# Document extraction libraries
+PyMuPDF>=1.23.0  # PDF extraction (fitz)
+python-docx>=1.1.0  # DOCX extraction
+
+# Text processing
+langchain>=0.1.0  # Text chunking utilities
+
+# Storage
+minio>=7.2.0  # S3-compatible storage client for MinIO
 
 # Utilities
-# python-dotenv>=1.0.0
-
+python-dotenv>=1.0.0

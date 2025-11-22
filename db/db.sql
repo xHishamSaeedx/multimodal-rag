@@ -99,3 +99,12 @@ CREATE TRIGGER update_documents_updated_at
     FOR EACH ROW
     EXECUTE FUNCTION update_updated_at_column();
 
+-- Note: Service role key bypasses RLS automatically
+-- These policies are for future use when using authenticated users
+-- For backend operations, use SUPABASE_SERVICE_ROLE_KEY which bypasses RLS
+
+-- Allow service role to bypass RLS (if needed for direct SQL access)
+-- Service role already bypasses RLS, but adding explicit policy for clarity
+-- CREATE POLICY "Service role bypass" ON documents FOR ALL TO service_role USING (true);
+-- CREATE POLICY "Service role bypass" ON chunks FOR ALL TO service_role USING (true);
+

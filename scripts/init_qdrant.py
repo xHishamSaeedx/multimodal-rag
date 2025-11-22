@@ -9,6 +9,7 @@ This script creates the Qdrant collection as specified in the Phase 1 documentat
 
 import os
 import sys
+from pathlib import Path
 from typing import Optional
 
 try:
@@ -22,6 +23,17 @@ except ImportError:
     print("Error: qdrant-client is not installed.")
     print("Install it with: pip install qdrant-client")
     sys.exit(1)
+
+# Try to import backend config for defaults
+try:
+    # Add backend directory to path
+    backend_dir = Path(__file__).parent.parent / "backend"
+    sys.path.insert(0, str(backend_dir))
+    from app.core.config import settings
+    HAS_CONFIG = True
+except ImportError:
+    HAS_CONFIG = False
+    settings = None
 
 
 def init_qdrant_collection(
@@ -75,18 +87,18 @@ def init_qdrant_collection(
                     distance=Distance.COSINE,  # Cosine similarity for text embeddings
                 ),
             )
-            print(f"✓ Collection '{collection_name}' created successfully!")
+            print(f"[OK] Collection '{collection_name}' created successfully!")
 
         # Verify collection was created
         collection_info = client.get_collection(collection_name)
         if collection_info.status == CollectionStatus.GREEN:
-            print(f"✓ Collection '{collection_name}' is ready.")
+            print(f"[OK] Collection '{collection_name}' is ready.")
             print(f"  - Vector size: {collection_info.config.params.vectors.size}")
             print(f"  - Distance metric: {collection_info.config.params.vectors.distance}")
             print(f"  - Points count: {collection_info.points_count}")
             return True
         else:
-            print(f"⚠ Warning: Collection status is {collection_info.status}")
+            print(f"[WARN] Warning: Collection status is {collection_info.status}")
             return False
 
     except Exception as e:
@@ -129,13 +141,38 @@ if __name__ == "__main__":
 
     args = parser.parse_args()
 
-    # Allow override from environment variable
-    qdrant_url = os.getenv("QDRANT_URL", args.url)
-    vector_size = int(os.getenv("QDRANT_VECTOR_SIZE", args.vector_size))
+    # Try to get defaults from backend config if available
+    if HAS_CONFIG and settings:
+        config_url = f"http://{settings.qdrant_host}:{settings.qdrant_port}"
+        config_collection = settings.qdrant_collection_name
+        config_vector_size = settings.qdrant_vector_size
+        print(f"[OK] Loaded defaults from backend settings")
+        print(f"  - Qdrant URL: {config_url}")
+        print(f"  - Collection: {config_collection}")
+        print(f"  - Vector size: {config_vector_size}")
+    else:
+        config_url = None
+        config_collection = None
+        config_vector_size = None
+
+    # Allow override from environment variable or command line args
+    # Priority: env var > cmd arg > config > default
+    qdrant_url = os.getenv("QDRANT_URL") or args.url or config_url or "http://localhost:6333"
+    collection_name = args.collection if args.collection != "text_chunks" else (config_collection or args.collection)
+    vector_size_env = os.getenv("QDRANT_VECTOR_SIZE")
+    vector_size_arg = args.vector_size if args.vector_size != 768 else None
+    vector_size = int(vector_size_env) if vector_size_env else (vector_size_arg or config_vector_size or args.vector_size)
+
+    print(f"\nUsing Configuration:")
+    print(f"  - Qdrant URL: {qdrant_url}")
+    print(f"  - Collection: {collection_name}")
+    print(f"  - Vector size: {vector_size}")
+    if args.recreate:
+        print(f"  - Mode: RECREATE (will delete existing collection)")
 
     success = init_qdrant_collection(
         qdrant_url=qdrant_url,
-        collection_name=args.collection,
+        collection_name=collection_name,
         vector_size=vector_size,
         recreate=args.recreate,
     )

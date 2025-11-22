@@ -1,0 +1,152 @@
+.about {
+  background-color: #ffffff;
+  color: #000000;
+  padding: 6rem 2rem;
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+}
+
+.about-container {
+  max-width: 1400px;
+  margin: 0 auto;
+  width: 100%;
+}
+
+.about-header {
+  text-align: center;
+  margin-bottom: 4rem;
+  max-width: 800px;
+  margin-left: auto;
+  margin-right: auto;
+}
+
+.about-title {
+  font-size: clamp(2rem, 4vw, 3rem);
+  font-weight: 800;
+  margin: 0 0 1rem 0;
+  letter-spacing: -0.02em;
+  color: #000000;
+}
+
+.about-subtitle {
+  font-size: clamp(1rem, 1.5vw, 1.25rem);
+  color: #666666;
+  line-height: 1.7;
+  margin: 0;
+}
+
+.about-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+  gap: 2rem;
+  margin-bottom: 5rem;
+}
+
+.about-card {
+  background-color: #fafafa;
+  border: 1px solid #e5e5e5;
+  padding: 2.5rem 2rem;
+  transition: all 0.3s ease;
+  position: relative;
+}
+
+.about-card:hover {
+  transform: translateY(-4px);
+  border-color: #000000;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.1);
+}
+
+.card-icon {
+  width: 2.5rem;
+  height: 2.5rem;
+  color: #000000;
+  margin-bottom: 1.5rem;
+  display: block;
+}
+
+.card-title {
+  font-size: 1.5rem;
+  font-weight: 700;
+  margin: 0 0 1rem 0;
+  color: #000000;
+  letter-spacing: -0.01em;
+}
+
+.card-description {
+  font-size: 1rem;
+  line-height: 1.7;
+  color: #666666;
+  margin: 0;
+}
+
+.about-tech {
+  text-align: center;
+  padding-top: 4rem;
+  border-top: 1px solid #e5e5e5;
+}
+
+.tech-title {
+  font-size: 1.5rem;
+  font-weight: 700;
+  margin: 0 0 2rem 0;
+  color: #000000;
+}
+
+.tech-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  justify-content: center;
+}
+
+.tech-tag {
+  background-color: #000000;
+  color: #ffffff;
+  padding: 0.5rem 1.25rem;
+  border-radius: 2px;
+  font-size: 0.9rem;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  transition: all 0.2s;
+}
+
+.tech-tag:hover {
+  background-color: #333333;
+  transform: scale(1.05);
+}
+
+@media (max-width: 768px) {
+  .about {
+    padding: 4rem 1rem;
+  }
+
+  .about-header {
+    margin-bottom: 3rem;
+  }
+
+  .about-grid {
+    grid-template-columns: 1fr;
+    gap: 1.5rem;
+    margin-bottom: 3rem;
+  }
+
+  .about-card {
+    padding: 2rem 1.5rem;
+  }
+
+  .about-tech {
+    padding-top: 3rem;
+  }
+
+  .tech-tags {
+    gap: 0.5rem;
+  }
+
+  .tech-tag {
+    padding: 0.4rem 1rem;
+    font-size: 0.85rem;
+  }
+}
+
