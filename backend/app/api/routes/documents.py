@@ -19,6 +19,8 @@ from app.api.schemas import (
     ErrorResponse,
 )
 from app.services.storage import MinIOStorage
+from app.repositories.document_repository import DocumentRepository, RepositoryError
+from app.repositories.vector_repository import VectorRepository, VectorRepositoryError
 from app.utils.exceptions import StorageError
 
 logger = logging.getLogger(__name__)
@@ -246,7 +248,12 @@ async def delete_document(
     ),
 ) -> DocumentDeleteResponse:
     """
-    Delete a document by object key.
+    Delete a document by object key with cascade deletion.
+    
+    This performs cascade deletion across all storage systems:
+    1. Deletes vectors from Qdrant
+    2. Deletes document and chunks from Supabase
+    3. Deletes file from MinIO (data lake)
     
     Args:
         object_key: Object key (path) of the document to delete
@@ -259,9 +266,17 @@ async def delete_document(
         object_key = unquote(object_key)
         
         storage = MinIOStorage()
+        doc_repo = DocumentRepository()
+        vector_repo = VectorRepository()
         
-        # Check if document exists
-        if not storage.document_exists(object_key):
+        # Check if document exists in MinIO
+        document_exists_in_storage = storage.document_exists(object_key)
+        
+        # Find document in Supabase by source_path
+        document = doc_repo.get_document_by_source_path(object_key)
+        
+        # If document doesn't exist in either place, return 404
+        if not document_exists_in_storage and not document:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail={
@@ -271,26 +286,80 @@ async def delete_document(
                 },
             )
         
-        # Delete document
-        storage.delete_document(object_key)
+        deletion_errors = []
+        deletion_success = []
+        
+        # 1. Delete from Qdrant (vectors) if document exists in Supabase
+        if document:
+            try:
+                vector_repo.delete_vectors_by_document(document.id)
+                deletion_success.append("Qdrant vectors")
+                logger.info(f"Deleted vectors from Qdrant for document: {document.id}")
+            except VectorRepositoryError as e:
+                deletion_errors.append(f"Qdrant: {e.message}")
+                logger.error(f"Failed to delete vectors from Qdrant: {e.message}", exc_info=True)
+            except Exception as e:
+                deletion_errors.append(f"Qdrant: {str(e)}")
+                logger.error(f"Unexpected error deleting vectors from Qdrant: {str(e)}", exc_info=True)
+            
+            # 2. Delete from Supabase (document and chunks)
+            try:
+                doc_repo.delete_document(document.id)
+                deletion_success.append("Supabase document and chunks")
+                logger.info(f"Deleted document and chunks from Supabase: {document.id}")
+            except RepositoryError as e:
+                deletion_errors.append(f"Supabase: {e.message}")
+                logger.error(f"Failed to delete from Supabase: {e.message}", exc_info=True)
+            except Exception as e:
+                deletion_errors.append(f"Supabase: {str(e)}")
+                logger.error(f"Unexpected error deleting from Supabase: {str(e)}", exc_info=True)
+        
+        # 3. Delete from MinIO (data lake)
+        if document_exists_in_storage:
+            try:
+                storage.delete_document(object_key)
+                deletion_success.append("MinIO data lake")
+                logger.info(f"Deleted document from MinIO: {object_key}")
+            except StorageError as e:
+                deletion_errors.append(f"MinIO: {e.message}")
+                logger.error(f"Failed to delete from MinIO: {e.message}", exc_info=True)
+            except Exception as e:
+                deletion_errors.append(f"MinIO: {str(e)}")
+                logger.error(f"Unexpected error deleting from MinIO: {str(e)}", exc_info=True)
+        
+        # If there were any errors, log them but still return success if at least one deletion succeeded
+        if deletion_errors:
+            logger.warning(
+                f"Partial deletion completed for {object_key}. "
+                f"Success: {', '.join(deletion_success)}. "
+                f"Errors: {'; '.join(deletion_errors)}"
+            )
+        
+        # If all deletions failed, return error
+        if not deletion_success and deletion_errors:
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail={
+                    "success": False,
+                    "error": f"Failed to delete document from all storage systems: {'; '.join(deletion_errors)}",
+                    "details": {"object_key": object_key, "errors": deletion_errors},
+                },
+            )
+        
+        # Build success message
+        success_message = f"Document deleted successfully: {object_key}"
+        if deletion_success:
+            success_message += f" (deleted from: {', '.join(deletion_success)})"
+        if deletion_errors:
+            success_message += f" (warnings: {'; '.join(deletion_errors)})"
         
         return DocumentDeleteResponse(
-            message=f"Document deleted successfully: {object_key}",
+            message=success_message,
             object_key=object_key,
         )
     
     except HTTPException:
         raise
-    except StorageError as e:
-        logger.error(f"StorageError: {e.message}", exc_info=True)
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail={
-                "success": False,
-                "error": e.message,
-                "details": e.details,
-            },
-        )
     except Exception as e:
         logger.error(f"Unexpected error deleting document: {str(e)}", exc_info=True)
         raise HTTPException(

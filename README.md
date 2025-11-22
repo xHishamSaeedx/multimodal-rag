@@ -6,6 +6,7 @@ This architecture combines hybrid retrieval (BM25 + dense vectors + metadata fil
 
 ## Table of Contents
 
+- [Service Access URLs](#service-access-urls)
 - [Data & Storage Layer](#-1-data--storage-layer)
 - [ML Services Layer](#-2-ml-services-layer)
 - [Retrieval & Reasoning Layer](#-3-retrieval--reasoning-layer)
@@ -17,6 +18,32 @@ This architecture combines hybrid retrieval (BM25 + dense vectors + metadata fil
   - [Flow 4: Visual/Diagram-Oriented Query](#flow-4-visualdiagram-oriented-query-image-path)
   - [Flow 5: Compliance Question](#flow-5-compliance-question-metadata--search-mix)
   - [Flow 6: Very Complex Query](#flow-6-very-complex-query-multi-step-agentic-reasoning)
+
+## Service Access URLs
+
+When running services via Docker Compose, access them at the following localhost URLs:
+
+### Qdrant (Vector Database)
+- **REST API**: `http://localhost:6333`
+- **Dashboard/Web UI**: `http://localhost:6333/dashboard`
+- **gRPC**: `localhost:6334` (gRPC endpoint, not HTTP)
+
+### Elasticsearch (BM25 Sparse Index)
+- **HTTP API**: `http://localhost:9200`
+- **Cluster Health**: `http://localhost:9200/_cluster/health`
+- **Transport**: `localhost:9300` (not HTTP)
+
+### MinIO (S3-compatible Storage)
+- **S3 API**: `http://localhost:9000`
+- **Console UI**: `http://localhost:9090`
+  - Default credentials: `admin` / `admin12345`
+
+**Quick Access:**
+- Qdrant Dashboard: `http://localhost:6333`
+- Elasticsearch: `http://localhost:9200`
+- MinIO Console: `http://localhost:9090` (login with admin/admin12345)
+
+All services are on the `rag-network` Docker network and can communicate using their service names (`qdrant`, `elasticsearch`, `minio`).
 
 ## 📌 1. Data & Storage Layer
 

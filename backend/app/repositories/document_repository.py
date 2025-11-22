@@ -160,6 +160,42 @@ class DocumentRepository:
                 {"document_id": str(document_id), "error": str(e)},
             ) from e
     
+    def get_document_by_source_path(self, source_path: str) -> Optional[Document]:
+        """
+        Get a document by source_path (object_key).
+        
+        Args:
+            source_path: Source path (object_key) in MinIO
+        
+        Returns:
+            Document object or None if not found
+        
+        Raises:
+            RepositoryError: If retrieval fails
+        """
+        try:
+            result = (
+                self.client.table(self.documents_table)
+                .select("*")
+                .eq("source_path", source_path)
+                .execute()
+            )
+            
+            if not result.data:
+                return None
+            
+            doc_data = result.data[0]
+            return self._document_from_dict(doc_data)
+        
+        except Exception as e:
+            if isinstance(e, (RepositoryError, DatabaseError)):
+                raise
+            logger.error(f"Error getting document by source_path: {str(e)}", exc_info=True)
+            raise RepositoryError(
+                f"Failed to get document by source_path: {str(e)}",
+                {"source_path": source_path, "error": str(e)},
+            ) from e
+    
     def create_chunks(
         self,
         document_id: UUID,

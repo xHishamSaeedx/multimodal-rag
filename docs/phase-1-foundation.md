@@ -617,6 +617,37 @@ Generate Embeddings → Store in Vector DB → Index in BM25 → Done
   - Qdrant: `curl http://localhost:6333/health`
   - Elasticsearch: `curl http://localhost:9200/_cluster/health`
   - MinIO: http://localhost:9090 (console UI)
+
+### Service Access URLs
+
+When services are running via Docker Compose, access them at:
+
+**Qdrant (Vector Database)**
+
+- REST API: `http://localhost:6333`
+- Dashboard/Web UI: `http://localhost:6333/dashboard`
+- gRPC: `localhost:6334` (gRPC endpoint, not HTTP)
+
+**Elasticsearch (BM25 Sparse Index)**
+
+- HTTP API: `http://localhost:9200`
+- Cluster Health: `http://localhost:9200/_cluster/health`
+- Transport: `localhost:9300` (not HTTP)
+
+**MinIO (S3-compatible Storage)**
+
+- S3 API: `http://localhost:9000`
+- Console UI: `http://localhost:9090`
+  - Default credentials: `admin` / `admin12345`
+
+**Quick Access:**
+
+- Qdrant Dashboard: `http://localhost:6333`
+- Elasticsearch: `http://localhost:9200`
+- MinIO Console: `http://localhost:9090` (login with admin/admin12345)
+
+All services are on the `rag-network` Docker network and can communicate using their service names (`qdrant`, `elasticsearch`, `minio`).
+
 - [ ] Create database tables in Supabase SQL Editor (see schema above)
 - [ ] Install Python dependencies: `pip install qdrant-client elasticsearch`
 - [ ] Initialize Qdrant collection: `python scripts/init_qdrant.py`
