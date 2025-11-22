@@ -16,6 +16,7 @@ from app.services.embedding.text_embedder import TextEmbedder, EmbeddingError
 from app.services.storage import MinIOStorage
 from app.repositories.document_repository import DocumentRepository, RepositoryError
 from app.repositories.vector_repository import VectorRepository, VectorRepositoryError
+from app.repositories.sparse_repository import SparseRepository, SparseRepositoryError
 from app.utils.exceptions import (
     ExtractionError,
     StorageError,
@@ -40,6 +41,7 @@ class IngestionPipeline:
     4. Store document and chunks in Supabase
     5. Generate embeddings for chunks
     6. Store embeddings in Qdrant (Vector DB)
+    7. Index chunks in Elasticsearch (BM25 sparse index)
     """
     
     def __init__(
@@ -66,6 +68,9 @@ class IngestionPipeline:
         self.vector_repo = VectorRepository(
             vector_size=self.embedder.embedding_dim,  # Use actual embedding dimension
         )
+        
+        # Initialize sparse repository for BM25 indexing
+        self.sparse_repo = SparseRepository()
         
         self.storage = MinIOStorage()
         self.repository = DocumentRepository()
@@ -227,9 +232,33 @@ class IngestionPipeline:
             )
             logger.info(f"✓ Stored {len(embeddings)} embeddings in Qdrant")
             
+            # Step 7: Index chunks in Elasticsearch (BM25)
+            logger.info(f"Step 7: Indexing chunks in Elasticsearch (BM25)")
+            
+            # Prepare data for BM25 indexing
+            chunk_texts = [chunk.text for chunk in chunks]
+            filenames = [filename] * len(chunks)
+            document_types = [file_type] * len(chunks)
+            source_paths = [object_key] * len(chunks)
+            created_at_list = [chunk.created_at for chunk in chunks]
+            
+            # Index chunks in Elasticsearch
+            self.sparse_repo.index_chunks(
+                chunk_ids=chunk_ids,
+                chunk_texts=chunk_texts,
+                document_ids=[document_id] * len(chunks),
+                filenames=filenames,
+                document_types=document_types,
+                source_paths=source_paths,
+                metadata_list=[chunk.metadata for chunk in chunks],
+                created_at_list=created_at_list,
+            )
+            logger.info(f"✓ Indexed {len(chunks)} chunks in Elasticsearch (BM25)")
+            
             logger.info(
                 f"Pipeline complete: Document {document_id} ingested with "
-                f"{len(chunks)} chunks and embeddings stored in Qdrant"
+                f"{len(chunks)} chunks, embeddings stored in Qdrant, "
+                f"and BM25 index in Elasticsearch"
             )
             
             return {
@@ -242,7 +271,7 @@ class IngestionPipeline:
                 "stats": stats,
             }
         
-        except (ExtractionError, StorageError, ChunkingError, RepositoryError, EmbeddingError, VectorRepositoryError) as e:
+        except (ExtractionError, StorageError, ChunkingError, RepositoryError, EmbeddingError, VectorRepositoryError, SparseRepositoryError) as e:
             logger.error(f"Pipeline error: {e.message}", exc_info=True)
             raise IngestionPipelineError(
                 f"Ingestion pipeline failed: {e.message}",

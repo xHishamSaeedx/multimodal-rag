@@ -21,6 +21,11 @@ try:
 except ImportError:
     QdrantClientLib = None
 
+try:
+    from elasticsearch import Elasticsearch
+except ImportError:
+    Elasticsearch = None
+
 from app.core.config import settings
 from app.utils.exceptions import BaseAppException
 
@@ -37,6 +42,9 @@ _supabase_client: Optional[Client] = None
 
 # Global Qdrant client instance
 _qdrant_client: Optional[QdrantClientLib] = None
+
+# Global Elasticsearch client instance
+_elasticsearch_client: Optional[Elasticsearch] = None
 
 
 def get_supabase_client() -> Client:
@@ -135,3 +143,67 @@ def reset_qdrant_client() -> None:
     """Reset the global Qdrant client (useful for testing)."""
     global _qdrant_client
     _qdrant_client = None
+
+
+def get_elasticsearch_client() -> Elasticsearch:
+    """
+    Get or create Elasticsearch client instance.
+    
+    Returns:
+        Elasticsearch client instance
+    
+    Raises:
+        DatabaseError: If Elasticsearch client creation fails
+    """
+    global _elasticsearch_client
+    
+    if _elasticsearch_client is not None:
+        return _elasticsearch_client
+    
+    if Elasticsearch is None:
+        raise DatabaseError(
+            "Elasticsearch client is not installed. Install it with: pip install 'elasticsearch>=8.0.0,<9.0.0'",
+            {},
+        )
+    
+    try:
+        # Parse URL to extract host and port
+        from urllib.parse import urlparse
+        parsed = urlparse(settings.elasticsearch_url)
+        host = parsed.hostname or "localhost"
+        port = parsed.port or 9200
+        
+        # Create Elasticsearch client
+        _elasticsearch_client = Elasticsearch(
+            hosts=[{"host": host, "port": port, "scheme": "http"}],
+            request_timeout=settings.elasticsearch_timeout,
+            max_retries=3,
+            retry_on_timeout=True,
+        )
+        
+        # Test connection
+        if not _elasticsearch_client.ping():
+            raise DatabaseError(
+                "Failed to connect to Elasticsearch: ping() returned False",
+                {"url": settings.elasticsearch_url},
+            )
+        
+        logger.info(
+            f"Initialized Elasticsearch client: {settings.elasticsearch_url}"
+        )
+        return _elasticsearch_client
+    except Exception as e:
+        logger.error(f"Failed to create Elasticsearch client: {str(e)}")
+        raise DatabaseError(
+            f"Failed to create Elasticsearch client: {str(e)}",
+            {
+                "url": settings.elasticsearch_url,
+                "error": str(e),
+            },
+        ) from e
+
+
+def reset_elasticsearch_client() -> None:
+    """Reset the global Elasticsearch client (useful for testing)."""
+    global _elasticsearch_client
+    _elasticsearch_client = None

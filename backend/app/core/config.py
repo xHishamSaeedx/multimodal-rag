@@ -53,6 +53,11 @@ class Settings(BaseSettings):
     qdrant_vector_size: int = 768  # e5-base-v2 uses 768 dimensions
     qdrant_timeout: int = 30
     
+    # Elasticsearch (BM25 Sparse Index) Settings
+    elasticsearch_url: str = "http://localhost:9200"
+    elasticsearch_index_name: str = "text_chunks"
+    elasticsearch_timeout: int = 30
+    
     # Embedding Settings
     embedding_model: str = "intfloat/e5-base-v2"  # Recommended model (768 dim)
     embedding_device: str = "cpu"  # "cpu" or "cuda"
