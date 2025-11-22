@@ -40,6 +40,12 @@ const Header: React.FC = () => {
           </button>
           <button 
             className="nav-link" 
+            onClick={() => scrollToSection('chat')}
+          >
+            Chat
+          </button>
+          <button 
+            className="nav-link" 
             onClick={() => scrollToSection('documents')}
           >
             Documents

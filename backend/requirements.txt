@@ -15,6 +15,7 @@ supabase>=2.0.0  # PostgreSQL-based document store
 # ML/AI libraries
 sentence-transformers>=2.2.0  # Embeddings (e5-base-v2, etc.)
 torch>=2.0.0  # Required by sentence-transformers
+openai>=1.0.0  # OpenAI API client for answer generation
 
 # Document extraction libraries
 PyMuPDF>=1.23.0  # PDF extraction (fitz)

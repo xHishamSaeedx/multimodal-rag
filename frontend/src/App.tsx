@@ -4,6 +4,7 @@ import Hero from './components/Hero';
 import About from './components/About';
 import DocumentUpload from './components/DocumentUpload';
 import DocumentList from './components/DocumentList';
+import Chat from './components/Chat';
 import './App.css';
 
 function App() {
@@ -14,6 +15,9 @@ function App() {
       <About />
       <section id="upload" className="upload-section">
         <DocumentUpload />
+      </section>
+      <section id="chat" className="chat-section">
+        <Chat />
       </section>
       <section id="documents" className="documents-section">
         <DocumentList />

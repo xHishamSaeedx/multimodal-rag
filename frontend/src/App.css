@@ -12,6 +12,14 @@
   align-items: center;
 }
 
+.chat-section {
+  background-color: #f9f9f9;
+  padding: 6rem 2rem;
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+}
+
 .documents-section {
   background-color: #ffffff;
   padding: 6rem 2rem;
@@ -20,6 +28,10 @@
 
 @media (max-width: 768px) {
   .upload-section {
+    padding: 4rem 1rem;
+  }
+
+  .chat-section {
     padding: 4rem 1rem;
   }
 

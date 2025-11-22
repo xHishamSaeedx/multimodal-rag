@@ -58,3 +58,38 @@ class DocumentDeleteResponse(BaseModel):
     success: bool = True
     message: str
     object_key: str
+
+
+class QueryRequest(BaseModel):
+    """Request model for query endpoint."""
+    
+    query: str
+    limit: Optional[int] = 10  # Number of chunks to retrieve
+    include_sources: bool = True  # Whether to include source citations
+    filter_conditions: Optional[Dict[str, Any]] = None  # Optional filters (document_id, document_type, etc.)
+
+
+class SourceInfo(BaseModel):
+    """Source citation information."""
+    
+    chunk_id: str
+    document_id: str
+    filename: str
+    chunk_index: int
+    chunk_text: str  # Truncated preview
+    full_chunk_text: str  # Full chunk text
+    citation: str
+    metadata: Optional[Dict[str, Any]] = None
+
+
+class QueryResponse(BaseModel):
+    """Response model for query endpoint."""
+    
+    success: bool = True
+    query: str
+    answer: str
+    sources: List[SourceInfo] = []
+    chunks_used: List[str] = []  # List of chunk IDs used
+    model: str  # Model used for generation
+    tokens_used: Optional[Dict[str, int]] = None  # Token usage (prompt_tokens, completion_tokens, total_tokens)
+    retrieval_stats: Optional[Dict[str, Any]] = None  # Retrieval statistics (chunks_found, etc.)

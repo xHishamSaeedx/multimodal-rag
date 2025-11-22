@@ -51,6 +51,43 @@ export interface DocumentDeleteResponse {
   object_key: string;
 }
 
+export interface SourceInfo {
+  chunk_id: string;
+  document_id: string;
+  filename: string;
+  chunk_index: number;
+  chunk_text: string;  // Truncated preview
+  full_chunk_text: string;  // Full chunk text
+  citation: string;
+  metadata?: Record<string, any> | null;
+}
+
+export interface QueryRequest {
+  query: string;
+  limit?: number;
+  include_sources?: boolean;
+  filter_conditions?: Record<string, any>;
+}
+
+export interface QueryResponse {
+  success: boolean;
+  query: string;
+  answer: string;
+  sources: SourceInfo[];
+  chunks_used: string[];
+  model: string;
+  tokens_used?: {
+    prompt_tokens: number;
+    completion_tokens: number;
+    total_tokens: number;
+  } | null;
+  retrieval_stats?: {
+    chunks_found: number;
+    chunks_used: number;
+    retrieval_method: string;
+  } | null;
+}
+
 export const api = {
   /**
    * Upload a single document for ingestion
@@ -165,6 +202,17 @@ export const api = {
     const encodedKey = encodeURIComponent(objectKey);
     const response = await apiClient.delete<DocumentDeleteResponse>(
       `/api/v1/documents/${encodedKey}`
+    );
+    return response.data;
+  },
+
+  /**
+   * Submit a query and get an answer from the RAG system
+   */
+  query: async (request: QueryRequest): Promise<QueryResponse> => {
+    const response = await apiClient.post<QueryResponse>(
+      '/api/v1/query',
+      request
     );
     return response.data;
   },

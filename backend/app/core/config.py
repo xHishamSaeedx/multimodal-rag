@@ -63,6 +63,10 @@ class Settings(BaseSettings):
     embedding_device: str = "cpu"  # "cpu" or "cuda"
     embedding_batch_size: int = 32
     
+    # OpenAI Settings (for Answer Generation)
+    openai_api_key: Optional[str] = None
+    openai_model: str = "gpt-3.5-turbo"  # Default model, can be overridden via env
+    
     model_config = {
         "env_file": str(ENV_FILE),  # Use .env file in backend directory
         "env_file_encoding": "utf-8",
