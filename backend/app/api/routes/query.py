@@ -36,7 +36,7 @@ async def query(
     
     This endpoint:
     1. Retrieves relevant chunks using hybrid search (BM25 + vector)
-    2. Generates an answer using OpenAI LLM
+    2. Generates an answer using Groq LLM
     3. Extracts and formats citations
     4. Returns the answer with sources
     
@@ -111,7 +111,7 @@ async def query(
                 },
             )
         
-        # Step 2: Generate answer using OpenAI LLM
+        # Step 2: Generate answer using Groq LLM
         logger.debug("Initializing AnswerGenerator...")
         answer_generator = AnswerGenerator()
         
@@ -125,10 +125,12 @@ async def query(
         llm_end_time = time.time()
         llm_duration = llm_end_time - llm_start_time
         
+        ttft = generation_result.get('ttft', None)
+        ttft_str = f"{ttft:.3f}s" if ttft is not None else "N/A"
         logger.info(
             f"Answer generated successfully: answer_length={len(generation_result['answer'])}, "
             f"sources={len(generation_result.get('sources', []))}, "
-            f"llm_duration={llm_duration:.3f} seconds"
+            f"llm_duration={llm_duration:.3f}s, ttft={ttft_str}"
         )
         
         # Step 3: Format sources

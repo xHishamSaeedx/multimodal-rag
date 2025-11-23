@@ -1,15 +1,16 @@
 """
 Answer generation service.
 
-Generates answers using LLM (OpenAI, Anthropic, or local models)
+Generates answers using LLM (Groq)
 with retrieved context and citation extraction.
 """
 
 import logging
+import time
 from typing import List, Dict, Any, Optional, Tuple
 from uuid import UUID
 
-from openai import OpenAI, APIError as OpenAIAPIError
+from groq import Groq
 from app.core.config import settings
 from app.utils.exceptions import BaseAppException
 
@@ -23,7 +24,7 @@ class AnswerGeneratorError(BaseAppException):
 
 class AnswerGenerator:
     """
-    Answer generation service using OpenAI LLM.
+    Answer generation service using Groq LLM.
     
     Features:
     - Generates answers from retrieved chunks
@@ -62,26 +63,34 @@ Please provide an answer based on the context above. If the context doesn't cont
         Initialize the answer generator.
         
         Args:
-            api_key: OpenAI API key (defaults to settings.openai_api_key)
-            model: OpenAI model name (defaults to settings.openai_model)
+            api_key: Groq API key (defaults to settings.groq_api_key)
+            model: Groq model name (defaults to settings.groq_model)
             temperature: Sampling temperature (0.0 for deterministic, higher for creative)
             max_tokens: Maximum tokens in response
             system_prompt: Custom system prompt (uses default if not provided)
         """
-        self.api_key = api_key or settings.openai_api_key
-        self.model = model or settings.openai_model
+        self.api_key = api_key or settings.groq_api_key
+        self.model = model or settings.groq_model
         self.temperature = temperature
         self.max_tokens = max_tokens
         self.system_prompt = system_prompt or self.DEFAULT_SYSTEM_PROMPT
         
         if not self.api_key:
             logger.warning(
-                "OpenAI API key not found. Answer generation will fail. "
-                "Please set OPENAI_API_KEY in your .env file."
+                "Groq API key not found. Answer generation will fail. "
+                "Please set GROQ_API_KEY in your .env file."
             )
-        else:
-            self.client = OpenAI(api_key=self.api_key)
+        if not self.model:
+            logger.warning(
+                "Groq model not found. Answer generation will fail. "
+                "Please set GROQ_MODEL in your .env file."
+            )
+        
+        if self.api_key:
+            self.client = Groq(api_key=self.api_key)
             logger.debug(f"Initialized AnswerGenerator with model: {self.model}")
+        else:
+            self.client = None
     
     def generate_answer(
         self,
@@ -117,7 +126,13 @@ Please provide an answer based on the context above. If the context doesn't cont
         """
         if not self.api_key:
             raise AnswerGeneratorError(
-                "OpenAI API key not configured. Please set OPENAI_API_KEY in your .env file.",
+                "Groq API key not configured. Please set GROQ_API_KEY in your .env file.",
+                {"query": query[:100] if query else ""},
+            )
+        
+        if not self.model:
+            raise AnswerGeneratorError(
+                "Groq model not configured. Please set GROQ_MODEL in your .env file.",
                 {"query": query[:100] if query else ""},
             )
         
@@ -154,7 +169,8 @@ Please provide an answer based on the context above. If the context doesn't cont
                 f"chunks={len(chunks)}, context_length={len(context_text)}"
             )
             
-            # Call OpenAI API
+            # Call Groq API and measure TTFT
+            request_start_time = time.time()
             response = self.client.chat.completions.create(
                 model=self.model,
                 messages=[
@@ -164,6 +180,8 @@ Please provide an answer based on the context above. If the context doesn't cont
                 temperature=self.temperature,
                 max_tokens=self.max_tokens,
             )
+            request_end_time = time.time()
+            ttft = request_end_time - request_start_time  # Time to first token (response received)
             
             # Extract answer
             answer = response.choices[0].message.content.strip()
@@ -190,7 +208,8 @@ Please provide an answer based on the context above. If the context doesn't cont
             
             logger.info(
                 f"Answer generated successfully: answer_length={len(answer)}, "
-                f"sources={len(sources)}, tokens={tokens_used['total_tokens'] if tokens_used else 'N/A'}"
+                f"sources={len(sources)}, tokens={tokens_used['total_tokens'] if tokens_used else 'N/A'}, "
+                f"ttft={ttft:.3f}s"
             )
             
             return {
@@ -199,19 +218,13 @@ Please provide an answer based on the context above. If the context doesn't cont
                 "chunks_used": chunks_used,
                 "model": self.model,
                 "tokens_used": tokens_used,
+                "ttft": ttft,  # Time to first token in seconds
             }
         
-        except OpenAIAPIError as e:
-            logger.error(f"OpenAI API error: {str(e)}", exc_info=True)
-            raise AnswerGeneratorError(
-                f"Failed to generate answer from OpenAI: {str(e)}",
-                {"query": query[:100] if query else "", "error": str(e)},
-            ) from e
-        
         except Exception as e:
-            logger.error(f"Unexpected error during answer generation: {str(e)}", exc_info=True)
+            logger.error(f"Groq API error during answer generation: {str(e)}", exc_info=True)
             raise AnswerGeneratorError(
-                f"Failed to generate answer: {str(e)}",
+                f"Failed to generate answer from Groq: {str(e)}",
                 {"query": query[:100] if query else "", "error": str(e)},
             ) from e
     
