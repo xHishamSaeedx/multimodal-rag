@@ -281,13 +281,17 @@ class VectorRepository:
                 f"(limit: {limit})"
             )
             
-            # Perform search
-            results = self.client.search(
+            # Perform search using query_points (new API in qdrant-client 1.16+)
+            # query_points replaces the deprecated search() method
+            query_result = self.client.query_points(
                 collection_name=self.collection_name,
-                query_vector=query_vector,
+                query=query_vector,
                 limit=limit,
                 query_filter=qdrant_filter,
             )
+            
+            # Extract results from QueryResponse object
+            results = query_result.points
             
             # Format results
             formatted_results = []

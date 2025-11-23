@@ -16,8 +16,9 @@ scrape_configs:
         refresh_interval: 5s
         filters:
           # Only scrape containers on the rag-network
+          # Docker Compose prefixes network name with project name
           - name: network
-            values: ["rag-network"]
+            values: ["multimodal-rag_rag-network", "rag-network"]
     
     relabel_configs:
       # Extract container name
@@ -61,12 +62,14 @@ scrape_configs:
             time: time
             attrs: attrs
       
-      # Remove the original log field and keep only output
+      # Drop empty log lines
       - drop:
-          expression: "^$"
+          expression: '^\s*$'
+          source: output
           drop_counter_reason: "empty_log_line"
       
       # Try to parse application JSON logs (from structlog)
+      # This will succeed for structured JSON logs and fail gracefully for plain text (uvicorn access logs)
       - json:
           expressions:
             correlation_id: correlation_id
@@ -78,7 +81,8 @@ scrape_configs:
           source: output
           drop_malformed: false
       
-      # Add labels from parsed JSON (if parsing succeeded)
+      # Add labels from parsed JSON (only if parsing succeeded)
+      # These labels will only be present for structured JSON logs
       - labels:
           level:
           logger:
@@ -86,15 +90,19 @@ scrape_configs:
           correlation_id:
           stream:
       
-      # Extract timestamp if available
+      # Extract timestamp if available (from JSON logs)
+      # Falls back to Docker log timestamp if not present
       - timestamp:
           source: timestamp
           format: RFC3339Nano
           fallback_formats:
             - RFC3339
             - Unix
+          fallback_to_current_time: true
       
       # Set output message
+      # For JSON logs: prefer message field if available, otherwise use full JSON output
+      # For plain text logs: use output as-is
       - output:
           source: output
 
