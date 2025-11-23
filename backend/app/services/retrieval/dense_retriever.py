@@ -4,6 +4,7 @@ Dense vector retrieval service.
 Retrieves chunks using Qdrant vector similarity search.
 """
 
+import asyncio
 import logging
 import time
 from typing import List, Optional, Dict, Any
@@ -91,14 +92,14 @@ class DenseRetriever:
         else:
             return self.embedder.embed_text(query_text)
     
-    def retrieve_with_embedding(
+    async def retrieve_with_embedding(
         self,
         query_embedding: List[float],
         limit: int = 10,
         filter_conditions: Optional[Dict[str, Any]] = None,
     ) -> List[Dict[str, Any]]:
         """
-        Retrieve chunks using a pre-computed query embedding.
+        Retrieve chunks using a pre-computed query embedding (async).
         
         This method does NOT include embedding generation time in retrieval timing.
         
@@ -111,9 +112,10 @@ class DenseRetriever:
             List of retrieved chunks (same format as retrieve())
         """
         try:
-            # Search vectors in Qdrant
+            # Search vectors in Qdrant (run in thread pool to avoid blocking)
             search_start = time.time()
-            raw_results = self.vector_repo.search_vectors(
+            raw_results = await asyncio.to_thread(
+                self.vector_repo.search_vectors,
                 query_vector=query_embedding,
                 limit=limit,
                 filter_conditions=filter_conditions,
@@ -173,14 +175,14 @@ class DenseRetriever:
                 {"error": str(e)},
             ) from e
     
-    def retrieve(
+    async def retrieve(
         self,
         query: str,
         limit: int = 10,
         filter_conditions: Optional[Dict[str, Any]] = None,
     ) -> List[Dict[str, Any]]:
         """
-        Retrieve chunks using vector similarity search.
+        Retrieve chunks using vector similarity search (async).
         
         Args:
             query: Search query text (will be embedded automatically)
@@ -218,10 +220,14 @@ class DenseRetriever:
             )
             
             # Generate query embedding (this is preprocessing, not retrieval)
-            query_embedding = self.generate_query_embedding(query)
+            # Run in thread pool since embedding model might block
+            query_embedding = await asyncio.to_thread(
+                self.generate_query_embedding,
+                query
+            )
             
             # Retrieve using pre-computed embedding
-            return self.retrieve_with_embedding(
+            return await self.retrieve_with_embedding(
                 query_embedding=query_embedding,
                 limit=limit,
                 filter_conditions=filter_conditions,
@@ -246,7 +252,7 @@ class DenseRetriever:
                 {"query": query[:100] if query else "", "error": str(e)},
             ) from e
     
-    def retrieve_by_document(
+    async def retrieve_by_document(
         self,
         query: str,
         document_id: UUID,
@@ -265,13 +271,13 @@ class DenseRetriever:
         Returns:
             List of retrieved chunks (same format as retrieve())
         """
-        return self.retrieve(
+        return await self.retrieve(
             query=query,
             limit=limit,
             filter_conditions={"document_id": document_id},
         )
     
-    def retrieve_by_type(
+    async def retrieve_by_type(
         self,
         query: str,
         document_type: str,
@@ -290,7 +296,7 @@ class DenseRetriever:
         Returns:
             List of retrieved chunks (same format as retrieve())
         """
-        return self.retrieve(
+        return await self.retrieve(
             query=query,
             limit=limit,
             filter_conditions={"document_type": document_type},

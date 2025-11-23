@@ -4,6 +4,7 @@ BM25 sparse retrieval service.
 Retrieves chunks using Elasticsearch BM25 search.
 """
 
+import asyncio
 import logging
 from typing import List, Optional, Dict, Any
 from uuid import UUID
@@ -44,14 +45,14 @@ class SparseRetriever:
         self.sparse_repo = sparse_repository or SparseRepository()
         logger.debug("Initialized SparseRetriever")
     
-    def retrieve(
+    async def retrieve(
         self,
         query: str,
         limit: int = 10,
         filter_conditions: Optional[Dict[str, Any]] = None,
     ) -> List[Dict[str, Any]]:
         """
-        Retrieve chunks using BM25 search.
+        Retrieve chunks using BM25 search (async).
         
         Args:
             query: Search query text
@@ -88,8 +89,9 @@ class SparseRetriever:
                 f"limit={limit}, filters={filter_conditions}"
             )
             
-            # Search using sparse repository
-            results = self.sparse_repo.search(
+            # Run synchronous repository search in thread pool to avoid blocking
+            results = await asyncio.to_thread(
+                self.sparse_repo.search,
                 query=query,
                 limit=limit,
                 filter_conditions=filter_conditions,
@@ -111,7 +113,7 @@ class SparseRetriever:
                 {"query": query[:100] if query else "", "error": str(e)},
             ) from e
     
-    def retrieve_by_document(
+    async def retrieve_by_document(
         self,
         query: str,
         document_id: UUID,
@@ -130,13 +132,13 @@ class SparseRetriever:
         Returns:
             List of retrieved chunks (same format as retrieve())
         """
-        return self.retrieve(
+        return await self.retrieve(
             query=query,
             limit=limit,
             filter_conditions={"document_id": document_id},
         )
     
-    def retrieve_by_type(
+    async def retrieve_by_type(
         self,
         query: str,
         document_type: str,
@@ -155,7 +157,7 @@ class SparseRetriever:
         Returns:
             List of retrieved chunks (same format as retrieve())
         """
-        return self.retrieve(
+        return await self.retrieve(
             query=query,
             limit=limit,
             filter_conditions={"document_type": document_type},

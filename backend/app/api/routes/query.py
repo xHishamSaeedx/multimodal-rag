@@ -84,7 +84,7 @@ async def query(
         
         logger.debug(f"Retrieving chunks: limit={request.limit}, filters={request.filter_conditions}")
         retrieval_start_time = time.time()
-        retrieved_chunks = hybrid_retriever.retrieve(
+        retrieved_chunks = await hybrid_retriever.retrieve(
             query=query_text,
             limit=request.limit,
             filter_conditions=request.filter_conditions,

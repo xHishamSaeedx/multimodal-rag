@@ -5,9 +5,9 @@ Combines BM25 (sparse) and vector (dense) retrieval results.
 Handles merging, deduplication, and score normalization.
 """
 
+import asyncio
 import logging
 import time
-from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import List, Optional, Dict, Any
 from uuid import UUID
 
@@ -55,7 +55,7 @@ class HybridRetriever:
         
         logger.debug("Initialized HybridRetriever")
     
-    def retrieve(
+    async def retrieve(
         self,
         query: str,
         limit: int = 10,
@@ -122,25 +122,24 @@ class HybridRetriever:
             
             # Step 0: Generate query embedding (preprocessing, not part of retrieval timing)
             embedding_start = time.time()
-            query_embedding = self.dense_retriever.generate_query_embedding(query)
+            # Run embedding generation in thread pool since it might block
+            query_embedding = await asyncio.to_thread(
+                self.dense_retriever.generate_query_embedding,
+                query
+            )
             embedding_time = time.time() - embedding_start
             logger.debug(f"Query embedding generated in {embedding_time:.3f}s (dim: {len(query_embedding)})")
             
             # Step 1: Parallel retrieval from both indexes (retrieval timing starts here)
             retrieval_start = time.time()
-            logger.info("Starting parallel retrieval (BM25 + Vector search)...")
+            logger.info("Starting parallel retrieval (BM25 + Vector search) using async/await...")
             
-            sparse_results = []
-            dense_results = []
-            sparse_time = 0.0
-            dense_time = 0.0
-            
-            # Define retrieval functions for parallel execution
-            def retrieve_sparse():
+            # Define async retrieval functions for parallel execution
+            async def retrieve_sparse():
                 start = time.time()
                 try:
-                    logger.debug("BM25 search started (parallel)...")
-                    results = self.sparse_retriever.retrieve(
+                    logger.debug("BM25 search started (async parallel)...")
+                    results = await self.sparse_retriever.retrieve(
                         query=query,
                         limit=sparse_limit,
                         filter_conditions=filter_conditions,
@@ -153,12 +152,12 @@ class HybridRetriever:
                     logger.warning(f"✗ BM25 retrieval failed after {elapsed:.3f}s: {str(e)}")
                     return [], elapsed, e
             
-            def retrieve_dense():
+            async def retrieve_dense():
                 start = time.time()
                 try:
-                    logger.debug("Vector search started (parallel)...")
+                    logger.debug("Vector search started (async parallel)...")
                     # Use pre-computed embedding (doesn't include embedding time)
-                    results = self.dense_retriever.retrieve_with_embedding(
+                    results = await self.dense_retriever.retrieve_with_embedding(
                         query_embedding=query_embedding,
                         limit=dense_limit,
                         filter_conditions=filter_conditions,
@@ -171,28 +170,17 @@ class HybridRetriever:
                     logger.warning(f"✗ Vector retrieval failed after {elapsed:.3f}s: {str(e)}")
                     return [], elapsed, e
             
-            # Execute both retrievers in parallel using ThreadPoolExecutor
-            logger.debug("Executing BM25 and Vector searches in parallel using ThreadPoolExecutor...")
-            with ThreadPoolExecutor(max_workers=2) as executor:
-                sparse_future = executor.submit(retrieve_sparse)
-                dense_future = executor.submit(retrieve_dense)
-                
-                # Wait for both to complete
-                for future in as_completed([sparse_future, dense_future]):
-                    try:
-                        results, elapsed, error = future.result()
-                        if future == sparse_future:
-                            sparse_results = results
-                            sparse_time = elapsed
-                            if error:
-                                logger.warning("Continuing with vector search only")
-                        else:
-                            dense_results = results
-                            dense_time = elapsed
-                            if error:
-                                logger.warning("Continuing with BM25 search only")
-                    except Exception as e:
-                        logger.error(f"Unexpected error in parallel retrieval: {str(e)}", exc_info=True)
+            # Execute both retrievers in parallel using asyncio.gather()
+            logger.debug("Executing BM25 and Vector searches in parallel using asyncio.gather()...")
+            (sparse_results, sparse_time, sparse_error), (dense_results, dense_time, dense_error) = await asyncio.gather(
+                retrieve_sparse(),
+                retrieve_dense(),
+            )
+            
+            if sparse_error:
+                logger.warning("Continuing with vector search only")
+            if dense_error:
+                logger.warning("Continuing with BM25 search only")
             
             retrieval_elapsed = time.time() - retrieval_start
             sequential_time = sparse_time + dense_time
@@ -411,7 +399,7 @@ class HybridRetriever:
         
         return results
     
-    def retrieve_by_document(
+    async def retrieve_by_document(
         self,
         query: str,
         document_id: UUID,
@@ -430,13 +418,13 @@ class HybridRetriever:
         Returns:
             List of retrieved chunks (same format as retrieve())
         """
-        return self.retrieve(
+        return await self.retrieve(
             query=query,
             limit=limit,
             filter_conditions={"document_id": document_id},
         )
     
-    def retrieve_by_type(
+    async def retrieve_by_type(
         self,
         query: str,
         document_type: str,
@@ -455,7 +443,7 @@ class HybridRetriever:
         Returns:
             List of retrieved chunks (same format as retrieve())
         """
-        return self.retrieve(
+        return await self.retrieve(
             query=query,
             limit=limit,
             filter_conditions={"document_type": document_type},
