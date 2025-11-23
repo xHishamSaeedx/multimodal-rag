@@ -180,6 +180,7 @@ Phase 1 establishes the foundational infrastructure and implements a minimal via
   # Check if container is running
   docker ps | grep elasticsearch
 
+
   # Check container logs
   docker logs multimodal-rag-elasticsearch
   ```

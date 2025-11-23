@@ -5,6 +5,7 @@ Retrieves chunks using Qdrant vector similarity search.
 """
 
 import logging
+import time
 from typing import List, Optional, Dict, Any
 from uuid import UUID
 
@@ -65,6 +66,113 @@ class DenseRetriever:
             f"dim={self.embedder.embedding_dim}"
         )
     
+    def generate_query_embedding(self, query: str) -> List[float]:
+        """
+        Generate query embedding (separate from retrieval timing).
+        
+        Args:
+            query: Search query text
+            
+        Returns:
+            Query embedding vector as list of floats
+        """
+        query_text = query.strip()
+        
+        # For e5-base-v2, we need "query: " prefix instead of "passage: "
+        if "e5" in self.embedder.model_name.lower():
+            query_text_with_prefix = f"query: {query_text}"
+            embedding = self.embedder.model.encode(
+                query_text_with_prefix,
+                convert_to_numpy=True,
+                normalize_embeddings=True,
+                show_progress_bar=False,
+            )
+            return embedding.tolist()
+        else:
+            return self.embedder.embed_text(query_text)
+    
+    def retrieve_with_embedding(
+        self,
+        query_embedding: List[float],
+        limit: int = 10,
+        filter_conditions: Optional[Dict[str, Any]] = None,
+    ) -> List[Dict[str, Any]]:
+        """
+        Retrieve chunks using a pre-computed query embedding.
+        
+        This method does NOT include embedding generation time in retrieval timing.
+        
+        Args:
+            query_embedding: Pre-computed query embedding vector
+            limit: Maximum number of results to return (default: 10)
+            filter_conditions: Optional filter conditions
+            
+        Returns:
+            List of retrieved chunks (same format as retrieve())
+        """
+        try:
+            # Search vectors in Qdrant
+            search_start = time.time()
+            raw_results = self.vector_repo.search_vectors(
+                query_vector=query_embedding,
+                limit=limit,
+                filter_conditions=filter_conditions,
+            )
+            search_time = time.time() - search_start
+            logger.debug(f"Qdrant vector search completed in {search_time:.3f}s")
+            
+            # Format results to match SparseRetriever format
+            results = []
+            for result in raw_results:
+                payload = result.get("payload", {})
+                
+                # Extract common fields from payload
+                formatted_result = {
+                    "chunk_id": payload.get("chunk_id", result.get("id", "")),
+                    "document_id": payload.get("document_id", ""),
+                    "score": result.get("score", 0.0),  # Cosine similarity score
+                    "chunk_text": payload.get("text", ""),
+                    "filename": payload.get("filename", ""),
+                    "document_type": payload.get("document_type", ""),
+                    "source_path": payload.get("source_path", ""),
+                    "chunk_index": payload.get("chunk_index"),
+                    "chunk_type": payload.get("chunk_type", "text"),
+                }
+                
+                # Add all other payload fields as metadata
+                metadata = {}
+                for key, value in payload.items():
+                    if key not in [
+                        "chunk_id",
+                        "document_id",
+                        "text",
+                        "filename",
+                        "document_type",
+                        "source_path",
+                        "chunk_index",
+                        "chunk_type",
+                    ]:
+                        metadata[key] = value
+                
+                formatted_result["metadata"] = metadata
+                results.append(formatted_result)
+            
+            logger.info(f"Retrieved {len(results)} chunks using vector similarity search")
+            return results
+        
+        except VectorRepositoryError as e:
+            logger.error(f"Vector repository error during retrieval: {str(e)}", exc_info=True)
+            raise DenseRetrieverError(
+                f"Failed to retrieve chunks: {str(e)}",
+                {"error": str(e)},
+            ) from e
+        except Exception as e:
+            logger.error(f"Unexpected error during dense retrieval: {str(e)}", exc_info=True)
+            raise DenseRetrieverError(
+                f"Unexpected error during dense retrieval: {str(e)}",
+                {"error": str(e)},
+            ) from e
+    
     def retrieve(
         self,
         query: str,
@@ -109,76 +217,15 @@ class DenseRetriever:
                 f"limit={limit}, filters={filter_conditions}"
             )
             
-            # Step 1: Generate query embedding
-            # For e5-base-v2, we need "query: " prefix instead of "passage: "
-            # The embed_text method adds "passage: " for e5 models, so we need to handle this
-            query_text = query.strip()
+            # Generate query embedding (this is preprocessing, not retrieval)
+            query_embedding = self.generate_query_embedding(query)
             
-            # Check if we need to override the passage prefix for queries
-            if "e5" in self.embedder.model_name.lower():
-                # For e5 models, embed_text adds "passage: " but we want "query: " for queries
-                # So we'll manually add "query: " and embed directly
-                query_text_with_prefix = f"query: {query_text}"
-                logger.debug("Generating query embedding with 'query:' prefix for e5 model...")
-                # Use model.encode directly to avoid the "passage: " prefix in embed_text
-                embedding = self.embedder.model.encode(
-                    query_text_with_prefix,
-                    convert_to_numpy=True,
-                    normalize_embeddings=True,
-                    show_progress_bar=False,
-                )
-                query_embedding = embedding.tolist()
-            else:
-                # For non-e5 models, use embed_text normally
-                logger.debug("Generating query embedding...")
-                query_embedding = self.embedder.embed_text(query_text)
-            logger.debug(f"Generated query embedding (dim: {len(query_embedding)})")
-            
-            # Step 2: Search vectors in Qdrant
-            raw_results = self.vector_repo.search_vectors(
-                query_vector=query_embedding,
+            # Retrieve using pre-computed embedding
+            return self.retrieve_with_embedding(
+                query_embedding=query_embedding,
                 limit=limit,
                 filter_conditions=filter_conditions,
             )
-            
-            # Step 3: Format results to match SparseRetriever format
-            results = []
-            for result in raw_results:
-                payload = result.get("payload", {})
-                
-                # Extract common fields from payload
-                formatted_result = {
-                    "chunk_id": payload.get("chunk_id", result.get("id", "")),
-                    "document_id": payload.get("document_id", ""),
-                    "score": result.get("score", 0.0),  # Cosine similarity score
-                    "chunk_text": payload.get("text", ""),
-                    "filename": payload.get("filename", ""),
-                    "document_type": payload.get("document_type", ""),
-                    "source_path": payload.get("source_path", ""),
-                    "chunk_index": payload.get("chunk_index"),
-                    "chunk_type": payload.get("chunk_type", "text"),
-                }
-                
-                # Add all other payload fields as metadata
-                metadata = {}
-                for key, value in payload.items():
-                    if key not in [
-                        "chunk_id",
-                        "document_id",
-                        "text",
-                        "filename",
-                        "document_type",
-                        "source_path",
-                        "chunk_index",
-                        "chunk_type",
-                    ]:
-                        metadata[key] = value
-                
-                formatted_result["metadata"] = metadata
-                results.append(formatted_result)
-            
-            logger.info(f"Retrieved {len(results)} chunks using vector similarity search")
-            return results
         
         except EmbeddingError as e:
             logger.error(f"Embedding error during dense retrieval: {str(e)}", exc_info=True)

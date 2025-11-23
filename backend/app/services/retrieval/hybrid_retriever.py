@@ -6,6 +6,8 @@ Handles merging, deduplication, and score normalization.
 """
 
 import logging
+import time
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import List, Optional, Dict, Any
 from uuid import UUID
 
@@ -110,37 +112,99 @@ class HybridRetriever:
             if dense_limit is None:
                 dense_limit = limit * 2
             
+            total_start = time.time()
+            
             logger.debug(
                 f"Hybrid retrieval: query='{query[:50]}...', "
                 f"limit={limit}, sparse_limit={sparse_limit}, dense_limit={dense_limit}, "
                 f"filters={filter_conditions}"
             )
             
-            # Step 1: Parallel retrieval from both indexes
-            logger.debug("Performing parallel retrieval from sparse and dense indexes...")
+            # Step 0: Generate query embedding (preprocessing, not part of retrieval timing)
+            embedding_start = time.time()
+            query_embedding = self.dense_retriever.generate_query_embedding(query)
+            embedding_time = time.time() - embedding_start
+            logger.debug(f"Query embedding generated in {embedding_time:.3f}s (dim: {len(query_embedding)})")
+            
+            # Step 1: Parallel retrieval from both indexes (retrieval timing starts here)
+            retrieval_start = time.time()
+            logger.info("Starting parallel retrieval (BM25 + Vector search)...")
             
             sparse_results = []
             dense_results = []
+            sparse_time = 0.0
+            dense_time = 0.0
             
-            try:
-                sparse_results = self.sparse_retriever.retrieve(
-                    query=query,
-                    limit=sparse_limit,
-                    filter_conditions=filter_conditions,
-                )
-                logger.debug(f"Retrieved {len(sparse_results)} results from BM25 search")
-            except SparseRetrieverError as e:
-                logger.warning(f"BM25 retrieval failed: {str(e)}, continuing with vector search only")
+            # Define retrieval functions for parallel execution
+            def retrieve_sparse():
+                start = time.time()
+                try:
+                    logger.debug("BM25 search started (parallel)...")
+                    results = self.sparse_retriever.retrieve(
+                        query=query,
+                        limit=sparse_limit,
+                        filter_conditions=filter_conditions,
+                    )
+                    elapsed = time.time() - start
+                    logger.info(f"✓ BM25 search completed in {elapsed:.3f}s: {len(results)} results")
+                    return results, elapsed, None
+                except SparseRetrieverError as e:
+                    elapsed = time.time() - start
+                    logger.warning(f"✗ BM25 retrieval failed after {elapsed:.3f}s: {str(e)}")
+                    return [], elapsed, e
             
-            try:
-                dense_results = self.dense_retriever.retrieve(
-                    query=query,
-                    limit=dense_limit,
-                    filter_conditions=filter_conditions,
-                )
-                logger.debug(f"Retrieved {len(dense_results)} results from vector search")
-            except DenseRetrieverError as e:
-                logger.warning(f"Vector retrieval failed: {str(e)}, continuing with BM25 search only")
+            def retrieve_dense():
+                start = time.time()
+                try:
+                    logger.debug("Vector search started (parallel)...")
+                    # Use pre-computed embedding (doesn't include embedding time)
+                    results = self.dense_retriever.retrieve_with_embedding(
+                        query_embedding=query_embedding,
+                        limit=dense_limit,
+                        filter_conditions=filter_conditions,
+                    )
+                    elapsed = time.time() - start
+                    logger.info(f"✓ Vector search completed in {elapsed:.3f}s: {len(results)} results")
+                    return results, elapsed, None
+                except DenseRetrieverError as e:
+                    elapsed = time.time() - start
+                    logger.warning(f"✗ Vector retrieval failed after {elapsed:.3f}s: {str(e)}")
+                    return [], elapsed, e
+            
+            # Execute both retrievers in parallel using ThreadPoolExecutor
+            logger.debug("Executing BM25 and Vector searches in parallel using ThreadPoolExecutor...")
+            with ThreadPoolExecutor(max_workers=2) as executor:
+                sparse_future = executor.submit(retrieve_sparse)
+                dense_future = executor.submit(retrieve_dense)
+                
+                # Wait for both to complete
+                for future in as_completed([sparse_future, dense_future]):
+                    try:
+                        results, elapsed, error = future.result()
+                        if future == sparse_future:
+                            sparse_results = results
+                            sparse_time = elapsed
+                            if error:
+                                logger.warning("Continuing with vector search only")
+                        else:
+                            dense_results = results
+                            dense_time = elapsed
+                            if error:
+                                logger.warning("Continuing with BM25 search only")
+                    except Exception as e:
+                        logger.error(f"Unexpected error in parallel retrieval: {str(e)}", exc_info=True)
+            
+            retrieval_elapsed = time.time() - retrieval_start
+            sequential_time = sparse_time + dense_time
+            parallel_savings = max(0, sequential_time - retrieval_elapsed)
+            efficiency = (parallel_savings / sequential_time * 100) if sequential_time > 0 else 0
+            
+            logger.info(
+                f"✓ Parallel retrieval completed in {retrieval_elapsed:.3f}s "
+                f"(BM25: {sparse_time:.3f}s, Vector: {dense_time:.3f}s) | "
+                f"Sequential would be: {sequential_time:.3f}s | "
+                f"Time saved: {parallel_savings:.3f}s ({efficiency:.1f}% faster)"
+            )
             
             if not sparse_results and not dense_results:
                 logger.warning("No results from either sparse or dense retrieval")
@@ -161,12 +225,18 @@ class HybridRetriever:
             merged_results = self._combine_scores(merged_results)
             
             # Step 5: Sort by combined score and return top-N
+            merge_start = time.time()
             merged_results.sort(key=lambda x: x.get("score", 0.0), reverse=True)
             final_results = merged_results[:limit]
+            merge_time = time.time() - merge_start
             
+            total_time = time.time() - total_start
             logger.info(
-                f"Hybrid retrieval complete: {len(final_results)} results "
-                f"(from {len(sparse_results)} sparse + {len(dense_results)} dense)"
+                f"Hybrid retrieval complete: {len(final_results)} results | "
+                f"Time breakdown: embedding={embedding_time:.3f}s (preprocessing), "
+                f"retrieval={retrieval_elapsed:.3f}s (parallel search), merge={merge_time:.3f}s | "
+                f"Total: {total_time:.3f}s | "
+                f"Sources: {len(sparse_results)} sparse + {len(dense_results)} dense"
             )
             
             return final_results

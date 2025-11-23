@@ -4,8 +4,9 @@ Query endpoint.
 POST /api/v1/query - Submit query and get answer
 """
 import logging
+import time
 import traceback
-from fastapi import APIRouter, HTTPException, status
+from fastapi import APIRouter, HTTPException, status, Request
 
 from app.api.schemas import QueryRequest, QueryResponse, SourceInfo, ErrorResponse
 from app.services.retrieval import HybridRetriever, HybridRetrieverError
@@ -28,6 +29,7 @@ router = APIRouter(prefix="/query", tags=["query"])
 )
 async def query(
     request: QueryRequest,
+    http_request: Request,
 ) -> QueryResponse:
     """
     Submit a query and get an answer from the RAG system.
@@ -73,17 +75,25 @@ async def query(
         logger.info(f"Processing query: '{query_text[:100]}...'")
         
         # Step 1: Retrieve relevant chunks using hybrid search
-        logger.debug("Initializing HybridRetriever...")
-        hybrid_retriever = HybridRetriever()
+        # Use pre-initialized HybridRetriever from app state
+        hybrid_retriever = getattr(http_request.app.state, "hybrid_retriever", None)
+        if hybrid_retriever is None:
+            # Fallback: create new instance if not pre-initialized
+            logger.warning("HybridRetriever not pre-initialized, creating new instance (slower)")
+            hybrid_retriever = HybridRetriever()
         
         logger.debug(f"Retrieving chunks: limit={request.limit}, filters={request.filter_conditions}")
+        retrieval_start_time = time.time()
         retrieved_chunks = hybrid_retriever.retrieve(
             query=query_text,
             limit=request.limit,
             filter_conditions=request.filter_conditions,
         )
+        retrieval_end_time = time.time()
+        retrieval_duration = retrieval_end_time - retrieval_start_time
         
-        logger.info(f"Retrieved {len(retrieved_chunks)} chunks")
+        # Note: retrieval_duration includes embedding time, but logs will show them separately
+        logger.info(f"Retrieved {len(retrieved_chunks)} chunks (total time: {retrieval_duration:.3f}s)")
         
         if not retrieved_chunks:
             logger.warning("No chunks retrieved for query")
@@ -106,15 +116,19 @@ async def query(
         answer_generator = AnswerGenerator()
         
         logger.debug("Generating answer from retrieved chunks...")
+        llm_start_time = time.time()
         generation_result = answer_generator.generate_answer(
             query=query_text,
             chunks=retrieved_chunks,
             include_sources=request.include_sources,
         )
+        llm_end_time = time.time()
+        llm_duration = llm_end_time - llm_start_time
         
         logger.info(
             f"Answer generated successfully: answer_length={len(generation_result['answer'])}, "
-            f"sources={len(generation_result.get('sources', []))}"
+            f"sources={len(generation_result.get('sources', []))}, "
+            f"llm_duration={llm_duration:.3f} seconds"
         )
         
         # Step 3: Format sources
