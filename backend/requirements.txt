@@ -14,7 +14,10 @@ supabase>=2.0.0  # PostgreSQL-based document store
 
 # ML/AI libraries
 sentence-transformers>=2.2.0  # Embeddings (e5-base-v2, etc.)
+# PyTorch with CUDA 13.0 support (install from PyTorch index)
+--extra-index-url https://download.pytorch.org/whl/cu130
 torch>=2.0.0  # Required by sentence-transformers
+torchvision>=0.15.0  # Required for some vision models
 groq>=0.4.0  # Groq API client for answer generation
 
 # Document extraction libraries

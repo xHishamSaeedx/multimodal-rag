@@ -67,6 +67,11 @@ class Settings(BaseSettings):
     groq_api_key: Optional[str] = None
     groq_model: Optional[str] = None  # Will be loaded from env file
     
+    # Observability Settings (Optional)
+    loki_enabled: bool = False  # Whether to push logs directly to Loki (optional, Promtail handles collection)
+    loki_url: str = "http://localhost:3100"  # Loki API URL
+    grafana_url: str = "http://localhost:3001"  # Grafana UI URL
+    
     model_config = {
         "env_file": str(ENV_FILE),  # Use .env file in backend directory
         "env_file_encoding": "utf-8",

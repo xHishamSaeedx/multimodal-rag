@@ -25,22 +25,24 @@ Recommendations for monitoring and logging that fit Phase 1 and scale to MLOps:
 
 ### 2. **Log Aggregation & Search (Phase 1)**
 
-**Option A: ELK Stack (Elasticsearch + Logstash + Kibana)**
+**Primary choice: Grafana Loki + Promtail**
 
+- Lightweight and efficient
+- Integrates seamlessly with Grafana (unified metrics and logs)
+- LogQL for powerful log querying
+- Good for Phase 1 and scales well
+- Lower resource requirements than ELK
+
+**Alternative: ELK Stack (Elasticsearch + Logstash + Kibana)**
+
+- More resource-intensive
 - Elasticsearch already in your stack
 - Kibana dashboards
 - Free and open-source
-- Good for Phase 1 and scales well
 
-**Option B: Grafana Loki + Promtail (lighter)**
+**Recommendation**: Grafana Loki + Promtail
 
-- Lighter than ELK
-- Integrates with Grafana
-- Good for smaller deployments
-
-**Recommendation**: ELK Stack (you already have Elasticsearch)
-
-**Why**: Reuses existing infrastructure, powerful search, good for resume
+**Why**: Lightweight, integrates with existing Grafana setup, unified observability with metrics and logs, good for resume
 
 ---
 
@@ -160,9 +162,9 @@ Application (FastAPI)
 └─────────────────────────────────────┘
     ↓
 ┌─────────────────────────────────────┐
-│  Log Aggregation (ELK Stack)       │
-│  - Logstash → Elasticsearch         │
-│  - Kibana for visualization         │
+│  Log Aggregation (Grafana Loki)     │
+│  - Promtail → Loki                  │
+│  - Grafana for visualization        │
 └─────────────────────────────────────┘
 
 Application (FastAPI)
@@ -213,7 +215,7 @@ Application (FastAPI)
 3. Health check endpoints
 4. Error logging with context
 
-**Should have**: 5. Grafana dashboards 6. Log aggregation (ELK or Loki) 7. Basic alerting (Prometheus alerts)
+**Should have**: 5. Grafana dashboards 6. Log aggregation (Grafana Loki) 7. Basic alerting (Prometheus alerts)
 
 **Nice to have**: 8. Distributed tracing (OpenTelemetry) 9. Sentry for error tracking 10. Custom ML metrics dashboard
 
@@ -224,22 +226,22 @@ Application (FastAPI)
 1. "Implemented comprehensive observability stack with structured logging, metrics, and distributed tracing"
 2. "Built ML-specific monitoring for retrieval quality and embedding performance"
 3. "Designed monitoring architecture that scales from MVP to production MLOps"
-4. "Integrated Prometheus, Grafana, and ELK stack for full-stack observability"
+4. "Integrated Prometheus, Grafana, and Grafana Loki for full-stack observability"
 5. "Implemented correlation IDs for end-to-end request tracing across microservices"
 
 ---
 
 ## Technology Stack Summary
 
-| Component           | Technology             | Phase | Purpose                     |
-| ------------------- | ---------------------- | ----- | --------------------------- |
-| **Logging**         | structlog + JSON       | 1     | Structured application logs |
-| **Log Aggregation** | ELK Stack              | 1     | Centralized log search      |
-| **Metrics**         | Prometheus             | 1     | Time-series metrics         |
-| **Visualization**   | Grafana                | 1     | Dashboards & alerts         |
-| **Tracing**         | OpenTelemetry + Jaeger | 1-2   | Distributed tracing         |
-| **Error Tracking**  | Sentry                 | 1     | Exception monitoring        |
-| **ML Tracking**     | MLflow                 | 4-5   | Experiment tracking         |
-| **ML Metrics**      | Custom Prometheus      | 1-5   | Retrieval quality           |
+| Component           | Technology              | Phase | Purpose                     |
+| ------------------- | ----------------------- | ----- | --------------------------- |
+| **Logging**         | structlog + JSON        | 1     | Structured application logs |
+| **Log Aggregation** | Grafana Loki + Promtail | 1     | Centralized log search      |
+| **Metrics**         | Prometheus              | 1     | Time-series metrics         |
+| **Visualization**   | Grafana                 | 1     | Dashboards & alerts         |
+| **Tracing**         | OpenTelemetry + Jaeger  | 1-2   | Distributed tracing         |
+| **Error Tracking**  | Sentry                  | 1     | Exception monitoring        |
+| **ML Tracking**     | MLflow                  | 4-5   | Experiment tracking         |
+| **ML Metrics**      | Custom Prometheus       | 1-5   | Retrieval quality           |
 
 This stack is production-ready, scales to MLOps, and demonstrates enterprise-level observability practices.

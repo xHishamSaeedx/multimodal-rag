@@ -1,5 +1,3 @@
-version: '3.8'
-
 services:
   # Note: PostgreSQL is replaced by Supabase Cloud (see README.md for setup)
   # Supabase provides PostgreSQL with additional features (REST API, Auth, Real-time)
@@ -10,12 +8,20 @@ services:
     image: qdrant/qdrant:latest
     container_name: multimodal-rag-qdrant
     ports:
-      - "6333:6333"  # REST API
-      - "6334:6334"  # gRPC
+      - "6333:6333" # REST API
+      - "6334:6334" # gRPC
     volumes:
       - qdrant_data:/qdrant/storage
     healthcheck:
-      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:6333/health"]
+      test:
+        [
+          "CMD",
+          "wget",
+          "--no-verbose",
+          "--tries=1",
+          "--spider",
+          "http://localhost:6333/health",
+        ]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -36,12 +42,56 @@ services:
     volumes:
       - elasticsearch_data:/usr/share/elasticsearch/data
     healthcheck:
-      test: ["CMD-SHELL", "curl -f http://localhost:9200/_cluster/health || exit 1"]
+      test:
+        ["CMD-SHELL", "curl -f http://localhost:9200/_cluster/health || exit 1"]
       interval: 30s
       timeout: 10s
       retries: 5
     networks:
       - rag-network
+
+  # Backend API - FastAPI Application
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: multimodal-rag-backend
+    ports:
+      - "8000:8000"
+    environment:
+      # Override service hostnames to use Docker service names
+      - QDRANT_HOST=qdrant
+      - ELASTICSEARCH_URL=http://elasticsearch:9200
+      - MINIO_ENDPOINT=minio:9000
+      # Development settings
+      - DEBUG=true
+      - ENVIRONMENT=development
+    volumes:
+      # Mount code for hot-reload (changes reflect immediately)
+      - ./backend:/app
+      # Exclude __pycache__ and other build artifacts
+      - /app/__pycache__
+      - /app/.pytest_cache
+    # GPU support for CUDA acceleration
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+    depends_on:
+      qdrant:
+        condition: service_started
+      elasticsearch:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+    networks:
+      - rag-network
+    restart: unless-stopped
+    labels:
+      - "logging=promtail"
 
   # MinIO - Raw Data Lake (S3-compatible storage)
   minio:
@@ -52,8 +102,8 @@ services:
       MINIO_ROOT_USER: admin
       MINIO_ROOT_PASSWORD: admin12345
     ports:
-      - "9000:9000"  # S3 API
-      - "9090:9090"  # Console UI
+      - "9000:9000" # S3 API
+      - "9090:9090" # Console UI
     volumes:
       - minio_data:/data
     healthcheck:
@@ -63,13 +113,86 @@ services:
       retries: 3
     networks:
       - rag-network
+    labels:
+      - "logging=promtail"
+
+  # Grafana Loki - Log Aggregation System
+  loki:
+    image: grafana/loki:latest
+    container_name: multimodal-rag-loki
+    ports:
+      - "3100:3100" # Loki HTTP API
+    volumes:
+      - ./backend/observability/loki/loki-config.yml:/etc/loki/local-config.yaml
+      - loki_data:/loki
+    command: -config.file=/etc/loki/local-config.yaml
+    networks:
+      - rag-network
+    restart: unless-stopped
+
+  # Promtail - Log Collection Agent
+  promtail:
+    image: grafana/promtail:latest
+    container_name: multimodal-rag-promtail
+    ports:
+      - "9080:9080" # Promtail HTTP API
+    volumes:
+      - ./backend/observability/promtail/promtail-config.yml:/etc/promtail/config.yml
+      - /var/lib/docker/containers:/var/lib/docker/containers:ro
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - promtail_positions:/tmp
+    command: -config.file=/etc/promtail/config.yml
+    depends_on:
+      loki:
+        condition: service_started
+    networks:
+      - rag-network
+    restart: unless-stopped
+
+  # Grafana - Visualization and Dashboards
+  grafana:
+    image: grafana/grafana:latest
+    container_name: multimodal-rag-grafana
+    ports:
+      - "3001:3000" # Grafana UI (using 3001 to avoid conflict with frontend)
+    environment:
+      - GF_SECURITY_ADMIN_USER=admin
+      - GF_SECURITY_ADMIN_PASSWORD=admin
+      - GF_AUTH_ANONYMOUS_ENABLED=false
+      - GF_INSTALL_PLUGINS=
+      # Configure Loki as a datasource
+      - GF_DATASOURCES_PROVISIONING_ENABLED=true
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ./backend/observability/grafana/provisioning:/etc/grafana/provisioning
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "wget",
+          "--no-verbose",
+          "--tries=1",
+          "--spider",
+          "http://localhost:3000/api/health",
+        ]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    depends_on:
+      loki:
+        condition: service_started
+    networks:
+      - rag-network
+    restart: unless-stopped
 
 volumes:
   qdrant_data:
   elasticsearch_data:
   minio_data:
+  loki_data:
+  promtail_positions:
+  grafana_data:
 
 networks:
   rag-network:
     driver: bridge
-
