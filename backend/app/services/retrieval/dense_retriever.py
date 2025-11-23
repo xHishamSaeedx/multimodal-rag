@@ -5,7 +5,6 @@ Retrieves chunks using Qdrant vector similarity search.
 """
 
 import asyncio
-import logging
 import time
 from typing import List, Optional, Dict, Any
 from uuid import UUID
@@ -13,8 +12,9 @@ from uuid import UUID
 from app.repositories.vector_repository import VectorRepository, VectorRepositoryError
 from app.services.embedding.text_embedder import TextEmbedder, EmbeddingError
 from app.utils.exceptions import BaseAppException
+from app.utils.logging import get_logger
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 
 class DenseRetrieverError(BaseAppException):
@@ -63,8 +63,9 @@ class DenseRetriever:
             )
         
         logger.debug(
-            f"Initialized DenseRetriever: model={self.embedder.model_name}, "
-            f"dim={self.embedder.embedding_dim}"
+            "dense_retriever_initialized",
+            model=self.embedder.model_name,
+            embedding_dim=self.embedder.embedding_dim,
         )
     
     def generate_query_embedding(self, query: str) -> List[float]:
@@ -121,7 +122,10 @@ class DenseRetriever:
                 filter_conditions=filter_conditions,
             )
             search_time = time.time() - search_start
-            logger.debug(f"Qdrant vector search completed in {search_time:.3f}s")
+            logger.debug(
+                "qdrant_vector_search_completed",
+                duration_seconds=round(search_time, 3),
+            )
             
             # Format results to match SparseRetriever format
             results = []
@@ -159,17 +163,31 @@ class DenseRetriever:
                 formatted_result["metadata"] = metadata
                 results.append(formatted_result)
             
-            logger.info(f"Retrieved {len(results)} chunks using vector similarity search")
+            logger.info(
+                "vector_search_completed",
+                results_count=len(results),
+                method="vector_similarity",
+            )
             return results
         
         except VectorRepositoryError as e:
-            logger.error(f"Vector repository error during retrieval: {str(e)}", exc_info=True)
+            logger.error(
+                "dense_retrieval_error",
+                error_type="VectorRepositoryError",
+                error_message=str(e),
+                exc_info=True,
+            )
             raise DenseRetrieverError(
                 f"Failed to retrieve chunks: {str(e)}",
                 {"error": str(e)},
             ) from e
         except Exception as e:
-            logger.error(f"Unexpected error during dense retrieval: {str(e)}", exc_info=True)
+            logger.error(
+                "dense_retrieval_error",
+                error_type=type(e).__name__,
+                error_message=str(e),
+                exc_info=True,
+            )
             raise DenseRetrieverError(
                 f"Unexpected error during dense retrieval: {str(e)}",
                 {"error": str(e)},
@@ -211,12 +229,14 @@ class DenseRetriever:
         """
         try:
             if not query or not query.strip():
-                logger.warning("Empty query provided to dense retriever")
+                logger.warning("dense_retrieval_empty_query")
                 return []
             
             logger.debug(
-                f"Retrieving chunks with vector search: query='{query[:50]}...', "
-                f"limit={limit}, filters={filter_conditions}"
+                "dense_retrieval_start",
+                query_preview=query[:50] if len(query) > 50 else query,
+                limit=limit,
+                has_filters=filter_conditions is not None,
             )
             
             # Generate query embedding (this is preprocessing, not retrieval)
@@ -234,19 +254,37 @@ class DenseRetriever:
             )
         
         except EmbeddingError as e:
-            logger.error(f"Embedding error during dense retrieval: {str(e)}", exc_info=True)
+            logger.error(
+                "dense_retrieval_embedding_error",
+                error_type="EmbeddingError",
+                error_message=str(e),
+                query_preview=query[:100] if query else "",
+                exc_info=True,
+            )
             raise DenseRetrieverError(
                 f"Failed to generate query embedding: {str(e)}",
                 {"query": query[:100] if query else "", "error": str(e)},
             ) from e
         except VectorRepositoryError as e:
-            logger.error(f"Vector repository error during retrieval: {str(e)}", exc_info=True)
+            logger.error(
+                "dense_retrieval_error",
+                error_type="VectorRepositoryError",
+                error_message=str(e),
+                query_preview=query[:100] if query else "",
+                exc_info=True,
+            )
             raise DenseRetrieverError(
                 f"Failed to retrieve chunks: {str(e)}",
                 {"query": query[:100] if query else "", "error": str(e)},
             ) from e
         except Exception as e:
-            logger.error(f"Unexpected error during dense retrieval: {str(e)}", exc_info=True)
+            logger.error(
+                "dense_retrieval_error",
+                error_type=type(e).__name__,
+                error_message=str(e),
+                query_preview=query[:100] if query else "",
+                exc_info=True,
+            )
             raise DenseRetrieverError(
                 f"Unexpected error during dense retrieval: {str(e)}",
                 {"query": query[:100] if query else "", "error": str(e)},

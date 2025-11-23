@@ -3,7 +3,6 @@ Query endpoint.
 
 POST /api/v1/query - Submit query and get answer
 """
-import logging
 import time
 import traceback
 from fastapi import APIRouter, HTTPException, status, Request
@@ -12,8 +11,9 @@ from app.api.schemas import QueryRequest, QueryResponse, SourceInfo, ErrorRespon
 from app.services.retrieval import HybridRetriever, HybridRetrieverError
 from app.services.generation import AnswerGenerator, AnswerGeneratorError
 from app.utils.exceptions import BaseAppException
+from app.utils.logging import get_logger
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 router = APIRouter(prefix="/query", tags=["query"])
 
@@ -72,17 +72,30 @@ async def query(
         )
     
     try:
-        logger.info(f"Processing query: '{query_text[:100]}...'")
+        logger.info(
+            "query_processing_start",
+            query_preview=query_text[:100] if len(query_text) > 100 else query_text,
+            query_length=len(query_text),
+            limit=request.limit,
+            include_sources=request.include_sources,
+        )
         
         # Step 1: Retrieve relevant chunks using hybrid search
         # Use pre-initialized HybridRetriever from app state
         hybrid_retriever = getattr(http_request.app.state, "hybrid_retriever", None)
         if hybrid_retriever is None:
             # Fallback: create new instance if not pre-initialized
-            logger.warning("HybridRetriever not pre-initialized, creating new instance (slower)")
+            logger.warning(
+                "retriever_not_preinitialized",
+                message="HybridRetriever not pre-initialized, creating new instance (slower)",
+            )
             hybrid_retriever = HybridRetriever()
         
-        logger.debug(f"Retrieving chunks: limit={request.limit}, filters={request.filter_conditions}")
+        logger.debug(
+            "retrieval_start",
+            limit=request.limit,
+            filter_conditions=request.filter_conditions,
+        )
         retrieval_start_time = time.time()
         retrieved_chunks = await hybrid_retriever.retrieve(
             query=query_text,
@@ -93,10 +106,14 @@ async def query(
         retrieval_duration = retrieval_end_time - retrieval_start_time
         
         # Note: retrieval_duration includes embedding time, but logs will show them separately
-        logger.info(f"Retrieved {len(retrieved_chunks)} chunks (total time: {retrieval_duration:.3f}s)")
+        logger.info(
+            "retrieval_completed",
+            chunks_retrieved=len(retrieved_chunks),
+            duration_seconds=round(retrieval_duration, 3),
+        )
         
         if not retrieved_chunks:
-            logger.warning("No chunks retrieved for query")
+            logger.warning("retrieval_empty", message="No chunks retrieved for query")
             return QueryResponse(
                 success=True,
                 query=query_text,
@@ -112,10 +129,9 @@ async def query(
             )
         
         # Step 2: Generate answer using Groq LLM
-        logger.debug("Initializing AnswerGenerator...")
+        logger.debug("answer_generation_start", chunks_count=len(retrieved_chunks))
         answer_generator = AnswerGenerator()
         
-        logger.debug("Generating answer from retrieved chunks...")
         llm_start_time = time.time()
         generation_result = answer_generator.generate_answer(
             query=query_text,
@@ -126,11 +142,13 @@ async def query(
         llm_duration = llm_end_time - llm_start_time
         
         ttft = generation_result.get('ttft', None)
-        ttft_str = f"{ttft:.3f}s" if ttft is not None else "N/A"
         logger.info(
-            f"Answer generated successfully: answer_length={len(generation_result['answer'])}, "
-            f"sources={len(generation_result.get('sources', []))}, "
-            f"llm_duration={llm_duration:.3f}s, ttft={ttft_str}"
+            "answer_generation_completed",
+            answer_length=len(generation_result['answer']),
+            sources_count=len(generation_result.get('sources', [])),
+            llm_duration_seconds=round(llm_duration, 3),
+            ttft_seconds=round(ttft, 3) if ttft is not None else None,
+            model=generation_result.get('model', 'unknown'),
         )
         
         # Step 3: Format sources
@@ -165,7 +183,14 @@ async def query(
         )
     
     except HybridRetrieverError as e:
-        logger.error(f"HybridRetrieverError: {str(e)}", exc_info=True)
+        logger.error(
+            "query_retrieval_error",
+            error_type="HybridRetrieverError",
+            error_message=str(e),
+            query_preview=query_text[:100] if query_text else "",
+            details=e.details if hasattr(e, 'details') else {},
+            exc_info=True,
+        )
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail={
@@ -176,7 +201,14 @@ async def query(
         )
     
     except AnswerGeneratorError as e:
-        logger.error(f"AnswerGeneratorError: {str(e)}", exc_info=True)
+        logger.error(
+            "query_generation_error",
+            error_type="AnswerGeneratorError",
+            error_message=str(e),
+            query_preview=query_text[:100] if query_text else "",
+            details=e.details if hasattr(e, 'details') else {},
+            exc_info=True,
+        )
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail={
@@ -187,9 +219,13 @@ async def query(
         )
     
     except Exception as e:
-        error_traceback = traceback.format_exc()
-        logger.error(f"Unexpected error during query processing: {str(e)}", exc_info=True)
-        logger.error(f"Traceback: {error_traceback}")
+        logger.error(
+            "query_unexpected_error",
+            error_type=type(e).__name__,
+            error_message=str(e),
+            query_preview=query_text[:100] if query_text else "",
+            exc_info=True,
+        )
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail={

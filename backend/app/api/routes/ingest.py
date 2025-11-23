@@ -3,7 +3,6 @@ Document ingestion endpoint.
 
 POST /api/v1/ingest - Upload and process documents
 """
-import logging
 import traceback
 from pathlib import Path
 from fastapi import APIRouter, UploadFile, File, HTTPException, status
@@ -21,8 +20,9 @@ from app.utils.exceptions import (
     FileReadError,
     StorageError,
 )
+from app.utils.logging import get_logger
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 router = APIRouter(prefix="/ingest", tags=["ingestion"])
 
@@ -70,12 +70,16 @@ async def ingest_document(file: UploadFile = File(...)) -> IngestResponse:
     
     try:
         # Initialize extractor
-        logger.info(f"Initializing TextExtractor for file: {file_name}")
+        logger.info("ingestion_start", file_name=file_name, file_size=file.size if hasattr(file, 'size') else None)
         extractor = TextExtractor()
         
         # Check if file type is supported
         if not extractor.is_supported(file_name):
-            logger.warning(f"Unsupported file type: {file_name}")
+            logger.warning(
+                "ingestion_unsupported_file_type",
+                file_name=file_name,
+                supported_types=list(extractor.SUPPORTED_EXTENSIONS.keys()),
+            )
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail={
@@ -89,11 +93,11 @@ async def ingest_document(file: UploadFile = File(...)) -> IngestResponse:
             )
         
         # Read file content
-        logger.info(f"Reading file content: {file_name}")
+        logger.debug("ingestion_reading_file", file_name=file_name)
         file_bytes = await file.read()
         
         if len(file_bytes) == 0:
-            logger.warning(f"Empty file: {file_name}")
+            logger.warning("ingestion_empty_file", file_name=file_name)
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail={
@@ -104,7 +108,7 @@ async def ingest_document(file: UploadFile = File(...)) -> IngestResponse:
             )
         
         # Execute complete ingestion pipeline
-        logger.info(f"Starting ingestion pipeline for: {file_name}")
+        logger.info("ingestion_pipeline_start", file_name=file_name, file_size_bytes=len(file_bytes))
         pipeline = IngestionPipeline()
         
         result = pipeline.ingest_document(
@@ -114,6 +118,15 @@ async def ingest_document(file: UploadFile = File(...)) -> IngestResponse:
         )
         
         extracted_content = result["extracted_content"]
+        
+        logger.info(
+            "ingestion_completed",
+            file_name=file_name,
+            document_id=result["document_id"],
+            chunks_count=result["chunks_count"],
+            extracted_text_length=len(extracted_content.text),
+            page_count=extracted_content.page_count,
+        )
         
         # Return response
         return IngestResponse(
@@ -139,7 +152,14 @@ async def ingest_document(file: UploadFile = File(...)) -> IngestResponse:
         raise
     
     except UnsupportedFileTypeError as e:
-        logger.error(f"UnsupportedFileTypeError: {e.message}", exc_info=True)
+        logger.error(
+            "ingestion_error",
+            error_type="UnsupportedFileTypeError",
+            error_message=e.message,
+            file_name=file_name,
+            details=e.details,
+            exc_info=True,
+        )
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail={
@@ -150,7 +170,14 @@ async def ingest_document(file: UploadFile = File(...)) -> IngestResponse:
         )
     
     except FileReadError as e:
-        logger.error(f"FileReadError: {e.message}", exc_info=True)
+        logger.error(
+            "ingestion_error",
+            error_type="FileReadError",
+            error_message=e.message,
+            file_name=file_name,
+            details=e.details,
+            exc_info=True,
+        )
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail={
@@ -161,7 +188,13 @@ async def ingest_document(file: UploadFile = File(...)) -> IngestResponse:
         )
     
     except IngestionPipelineError as e:
-        logger.error(f"IngestionPipelineError: {str(e)}", exc_info=True)
+        logger.error(
+            "ingestion_error",
+            error_type="IngestionPipelineError",
+            error_message=str(e),
+            file_name=file_name,
+            exc_info=True,
+        )
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail={
@@ -172,7 +205,14 @@ async def ingest_document(file: UploadFile = File(...)) -> IngestResponse:
         )
     
     except StorageError as e:
-        logger.error(f"StorageError: {e.message}", exc_info=True)
+        logger.error(
+            "ingestion_error",
+            error_type="StorageError",
+            error_message=e.message,
+            file_name=file_name,
+            details=e.details,
+            exc_info=True,
+        )
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail={
@@ -183,7 +223,14 @@ async def ingest_document(file: UploadFile = File(...)) -> IngestResponse:
         )
     
     except ExtractionError as e:
-        logger.error(f"ExtractionError: {e.message}", exc_info=True)
+        logger.error(
+            "ingestion_error",
+            error_type="ExtractionError",
+            error_message=e.message,
+            file_name=file_name,
+            details=e.details,
+            exc_info=True,
+        )
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail={
@@ -194,9 +241,13 @@ async def ingest_document(file: UploadFile = File(...)) -> IngestResponse:
         )
     
     except Exception as e:
-        error_traceback = traceback.format_exc()
-        logger.error(f"Unexpected error during ingestion: {str(e)}", exc_info=True)
-        logger.error(f"Traceback: {error_traceback}")
+        logger.error(
+            "ingestion_unexpected_error",
+            error_type=type(e).__name__,
+            error_message=str(e),
+            file_name=file_name if 'file_name' in locals() else (file.filename if file else "unknown"),
+            exc_info=True,
+        )
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail={

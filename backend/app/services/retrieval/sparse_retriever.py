@@ -5,14 +5,14 @@ Retrieves chunks using Elasticsearch BM25 search.
 """
 
 import asyncio
-import logging
 from typing import List, Optional, Dict, Any
 from uuid import UUID
 
 from app.repositories.sparse_repository import SparseRepository, SparseRepositoryError
 from app.utils.exceptions import BaseAppException
+from app.utils.logging import get_logger
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 
 class SparseRetrieverError(BaseAppException):
@@ -43,7 +43,7 @@ class SparseRetriever:
             sparse_repository: Optional SparseRepository instance (creates new if not provided)
         """
         self.sparse_repo = sparse_repository or SparseRepository()
-        logger.debug("Initialized SparseRetriever")
+        logger.debug("sparse_retriever_initialized")
     
     async def retrieve(
         self,
@@ -81,12 +81,14 @@ class SparseRetriever:
         """
         try:
             if not query or not query.strip():
-                logger.warning("Empty query provided to sparse retriever")
+                logger.warning("sparse_retrieval_empty_query")
                 return []
             
             logger.debug(
-                f"Retrieving chunks with BM25: query='{query[:50]}...', "
-                f"limit={limit}, filters={filter_conditions}"
+                "sparse_retrieval_start",
+                query_preview=query[:50] if len(query) > 50 else query,
+                limit=limit,
+                has_filters=filter_conditions is not None,
             )
             
             # Run synchronous repository search in thread pool to avoid blocking
@@ -97,17 +99,33 @@ class SparseRetriever:
                 filter_conditions=filter_conditions,
             )
             
-            logger.info(f"Retrieved {len(results)} chunks using BM25 search")
+            logger.info(
+                "bm25_search_completed",
+                results_count=len(results),
+                method="BM25",
+            )
             return results
         
         except SparseRepositoryError as e:
-            logger.error(f"Sparse repository error during retrieval: {str(e)}", exc_info=True)
+            logger.error(
+                "sparse_retrieval_error",
+                error_type="SparseRepositoryError",
+                error_message=str(e),
+                query_preview=query[:100] if query else "",
+                exc_info=True,
+            )
             raise SparseRetrieverError(
                 f"Failed to retrieve chunks: {str(e)}",
                 {"query": query[:100] if query else "", "error": str(e)},
             ) from e
         except Exception as e:
-            logger.error(f"Unexpected error during sparse retrieval: {str(e)}", exc_info=True)
+            logger.error(
+                "sparse_retrieval_error",
+                error_type=type(e).__name__,
+                error_message=str(e),
+                query_preview=query[:100] if query else "",
+                exc_info=True,
+            )
             raise SparseRetrieverError(
                 f"Unexpected error during sparse retrieval: {str(e)}",
                 {"query": query[:100] if query else "", "error": str(e)},

@@ -6,7 +6,6 @@ Handles merging, deduplication, and score normalization.
 """
 
 import asyncio
-import logging
 import time
 from typing import List, Optional, Dict, Any
 from uuid import UUID
@@ -14,8 +13,9 @@ from uuid import UUID
 from app.services.retrieval.sparse_retriever import SparseRetriever, SparseRetrieverError
 from app.services.retrieval.dense_retriever import DenseRetriever, DenseRetrieverError
 from app.utils.exceptions import BaseAppException
+from app.utils.logging import get_logger
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 
 class HybridRetrieverError(BaseAppException):
@@ -53,7 +53,7 @@ class HybridRetriever:
         self.dense_retriever = dense_retriever or DenseRetriever()
         self.normalize_scores = normalize_scores
         
-        logger.debug("Initialized HybridRetriever")
+        logger.debug("hybrid_retriever_initialized")
     
     async def retrieve(
         self,
@@ -103,7 +103,7 @@ class HybridRetriever:
         """
         try:
             if not query or not query.strip():
-                logger.warning("Empty query provided to hybrid retriever")
+                logger.warning("hybrid_retrieval_empty_query")
                 return []
             
             # Set default limits if not provided
@@ -115,9 +115,12 @@ class HybridRetriever:
             total_start = time.time()
             
             logger.debug(
-                f"Hybrid retrieval: query='{query[:50]}...', "
-                f"limit={limit}, sparse_limit={sparse_limit}, dense_limit={dense_limit}, "
-                f"filters={filter_conditions}"
+                "hybrid_retrieval_start",
+                query_preview=query[:50] if len(query) > 50 else query,
+                limit=limit,
+                sparse_limit=sparse_limit,
+                dense_limit=dense_limit,
+                has_filters=filter_conditions is not None,
             )
             
             # Step 0: Generate query embedding (preprocessing, not part of retrieval timing)
@@ -128,34 +131,46 @@ class HybridRetriever:
                 query
             )
             embedding_time = time.time() - embedding_start
-            logger.debug(f"Query embedding generated in {embedding_time:.3f}s (dim: {len(query_embedding)})")
+            logger.debug(
+                "query_embedding_generated",
+                duration_seconds=round(embedding_time, 3),
+                embedding_dim=len(query_embedding),
+            )
             
             # Step 1: Parallel retrieval from both indexes (retrieval timing starts here)
             retrieval_start = time.time()
-            logger.info("Starting parallel retrieval (BM25 + Vector search) using async/await...")
+            logger.info("hybrid_retrieval_parallel_start", method="async_await")
             
             # Define async retrieval functions for parallel execution
             async def retrieve_sparse():
                 start = time.time()
                 try:
-                    logger.debug("BM25 search started (async parallel)...")
+                    logger.debug("bm25_search_start", method="async_parallel")
                     results = await self.sparse_retriever.retrieve(
                         query=query,
                         limit=sparse_limit,
                         filter_conditions=filter_conditions,
                     )
                     elapsed = time.time() - start
-                    logger.info(f"✓ BM25 search completed in {elapsed:.3f}s: {len(results)} results")
+                    logger.info(
+                        "bm25_search_completed",
+                        duration_seconds=round(elapsed, 3),
+                        results_count=len(results),
+                    )
                     return results, elapsed, None
                 except SparseRetrieverError as e:
                     elapsed = time.time() - start
-                    logger.warning(f"✗ BM25 retrieval failed after {elapsed:.3f}s: {str(e)}")
+                    logger.warning(
+                        "bm25_search_failed",
+                        duration_seconds=round(elapsed, 3),
+                        error_message=str(e),
+                    )
                     return [], elapsed, e
             
             async def retrieve_dense():
                 start = time.time()
                 try:
-                    logger.debug("Vector search started (async parallel)...")
+                    logger.debug("vector_search_start", method="async_parallel")
                     # Use pre-computed embedding (doesn't include embedding time)
                     results = await self.dense_retriever.retrieve_with_embedding(
                         query_embedding=query_embedding,
@@ -163,24 +178,32 @@ class HybridRetriever:
                         filter_conditions=filter_conditions,
                     )
                     elapsed = time.time() - start
-                    logger.info(f"✓ Vector search completed in {elapsed:.3f}s: {len(results)} results")
+                    logger.info(
+                        "vector_search_completed",
+                        duration_seconds=round(elapsed, 3),
+                        results_count=len(results),
+                    )
                     return results, elapsed, None
                 except DenseRetrieverError as e:
                     elapsed = time.time() - start
-                    logger.warning(f"✗ Vector retrieval failed after {elapsed:.3f}s: {str(e)}")
+                    logger.warning(
+                        "vector_search_failed",
+                        duration_seconds=round(elapsed, 3),
+                        error_message=str(e),
+                    )
                     return [], elapsed, e
             
             # Execute both retrievers in parallel using asyncio.gather()
-            logger.debug("Executing BM25 and Vector searches in parallel using asyncio.gather()...")
+            logger.debug("parallel_search_execution", method="asyncio_gather")
             (sparse_results, sparse_time, sparse_error), (dense_results, dense_time, dense_error) = await asyncio.gather(
                 retrieve_sparse(),
                 retrieve_dense(),
             )
             
             if sparse_error:
-                logger.warning("Continuing with vector search only")
+                logger.warning("hybrid_retrieval_partial_failure", fallback="vector_only")
             if dense_error:
-                logger.warning("Continuing with BM25 search only")
+                logger.warning("hybrid_retrieval_partial_failure", fallback="bm25_only")
             
             retrieval_elapsed = time.time() - retrieval_start
             sequential_time = sparse_time + dense_time
@@ -188,18 +211,21 @@ class HybridRetriever:
             efficiency = (parallel_savings / sequential_time * 100) if sequential_time > 0 else 0
             
             logger.info(
-                f"✓ Parallel retrieval completed in {retrieval_elapsed:.3f}s "
-                f"(BM25: {sparse_time:.3f}s, Vector: {dense_time:.3f}s) | "
-                f"Sequential would be: {sequential_time:.3f}s | "
-                f"Time saved: {parallel_savings:.3f}s ({efficiency:.1f}% faster)"
+                "parallel_retrieval_completed",
+                duration_seconds=round(retrieval_elapsed, 3),
+                bm25_duration_seconds=round(sparse_time, 3),
+                vector_duration_seconds=round(dense_time, 3),
+                sequential_duration_seconds=round(sequential_time, 3),
+                time_saved_seconds=round(parallel_savings, 3),
+                efficiency_percent=round(efficiency, 1),
             )
             
             if not sparse_results and not dense_results:
-                logger.warning("No results from either sparse or dense retrieval")
+                logger.warning("hybrid_retrieval_no_results")
                 return []
             
             # Step 2: Merge and deduplicate results
-            logger.debug("Merging and deduplicating results...")
+            logger.debug("hybrid_retrieval_merge_start")
             merged_results = self._merge_and_deduplicate(
                 sparse_results=sparse_results,
                 dense_results=dense_results,
@@ -220,17 +246,25 @@ class HybridRetriever:
             
             total_time = time.time() - total_start
             logger.info(
-                f"Hybrid retrieval complete: {len(final_results)} results | "
-                f"Time breakdown: embedding={embedding_time:.3f}s (preprocessing), "
-                f"retrieval={retrieval_elapsed:.3f}s (parallel search), merge={merge_time:.3f}s | "
-                f"Total: {total_time:.3f}s | "
-                f"Sources: {len(sparse_results)} sparse + {len(dense_results)} dense"
+                "hybrid_retrieval_complete",
+                results_count=len(final_results),
+                embedding_duration_seconds=round(embedding_time, 3),
+                retrieval_duration_seconds=round(retrieval_elapsed, 3),
+                merge_duration_seconds=round(merge_time, 3),
+                total_duration_seconds=round(total_time, 3),
+                sparse_results_count=len(sparse_results),
+                dense_results_count=len(dense_results),
             )
             
             return final_results
         
         except Exception as e:
-            logger.error(f"Unexpected error during hybrid retrieval: {str(e)}", exc_info=True)
+            logger.error(
+                "hybrid_retrieval_error",
+                error_type=type(e).__name__,
+                error_message=str(e),
+                exc_info=True,
+            )
             raise HybridRetrieverError(
                 f"Failed to perform hybrid retrieval: {str(e)}",
                 {"query": query[:100] if query else "", "error": str(e)},

@@ -5,7 +5,6 @@ Generates answers using LLM (Groq)
 with retrieved context and citation extraction.
 """
 
-import logging
 import time
 from typing import List, Dict, Any, Optional, Tuple
 from uuid import UUID
@@ -13,8 +12,9 @@ from uuid import UUID
 from groq import Groq
 from app.core.config import settings
 from app.utils.exceptions import BaseAppException
+from app.utils.logging import get_logger
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 
 class AnswerGeneratorError(BaseAppException):
@@ -77,18 +77,20 @@ Please provide an answer based on the context above. If the context doesn't cont
         
         if not self.api_key:
             logger.warning(
-                "Groq API key not found. Answer generation will fail. "
-                "Please set GROQ_API_KEY in your .env file."
+                "answer_generator_config_missing",
+                config_key="GROQ_API_KEY",
+                message="Answer generation will fail. Please set GROQ_API_KEY in your .env file.",
             )
         if not self.model:
             logger.warning(
-                "Groq model not found. Answer generation will fail. "
-                "Please set GROQ_MODEL in your .env file."
+                "answer_generator_config_missing",
+                config_key="GROQ_MODEL",
+                message="Answer generation will fail. Please set GROQ_MODEL in your .env file.",
             )
         
         if self.api_key:
             self.client = Groq(api_key=self.api_key)
-            logger.debug(f"Initialized AnswerGenerator with model: {self.model}")
+            logger.debug("answer_generator_initialized", model=self.model)
         else:
             self.client = None
     
@@ -143,7 +145,7 @@ Please provide an answer based on the context above. If the context doesn't cont
             )
         
         if not chunks:
-            logger.warning("No chunks provided for answer generation")
+            logger.warning("answer_generation_no_chunks")
             return {
                 "answer": "I don't have enough information to answer this question. No relevant context was found.",
                 "sources": [],
@@ -165,8 +167,10 @@ Please provide an answer based on the context above. If the context doesn't cont
             )
             
             logger.debug(
-                f"Generating answer: query='{query[:50]}...', "
-                f"chunks={len(chunks)}, context_length={len(context_text)}"
+                "answer_generation_start",
+                query_preview=query[:50] if len(query) > 50 else query,
+                chunks_count=len(chunks),
+                context_length=len(context_text),
             )
             
             # Call Groq API and measure TTFT
@@ -207,9 +211,12 @@ Please provide an answer based on the context above. If the context doesn't cont
                 }
             
             logger.info(
-                f"Answer generated successfully: answer_length={len(answer)}, "
-                f"sources={len(sources)}, tokens={tokens_used['total_tokens'] if tokens_used else 'N/A'}, "
-                f"ttft={ttft:.3f}s"
+                "answer_generation_completed",
+                answer_length=len(answer),
+                sources_count=len(sources),
+                total_tokens=tokens_used['total_tokens'] if tokens_used else None,
+                ttft_seconds=round(ttft, 3),
+                model=self.model,
             )
             
             return {
@@ -222,7 +229,13 @@ Please provide an answer based on the context above. If the context doesn't cont
             }
         
         except Exception as e:
-            logger.error(f"Groq API error during answer generation: {str(e)}", exc_info=True)
+            logger.error(
+                "answer_generation_error",
+                error_type=type(e).__name__,
+                error_message=str(e),
+                query_preview=query[:100] if query else "",
+                exc_info=True,
+            )
             raise AnswerGeneratorError(
                 f"Failed to generate answer from Groq: {str(e)}",
                 {"query": query[:100] if query else "", "error": str(e)},
@@ -265,8 +278,10 @@ Please provide an answer based on the context above. If the context doesn't cont
             # Check if adding this chunk would exceed max length
             if current_length + len(chunk_with_citation) > max_length and context_parts:
                 logger.debug(
-                    f"Context length limit reached ({max_length} chars), "
-                    f"stopping at chunk {idx + 1}/{len(chunks)}"
+                    "context_length_limit_reached",
+                    max_length=max_length,
+                    chunks_included=idx + 1,
+                    total_chunks=len(chunks),
                 )
                 break
             
