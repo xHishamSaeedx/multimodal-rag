@@ -25,7 +25,7 @@ PyMuPDF>=1.23.0  # PDF extraction (fitz)
 python-docx>=1.1.0  # DOCX extraction
 
 # Text processing
-langchain>=0.1.0  # Text chunking utilities
+langchain==0.3.27  # Text chunking utilities
 
 # Storage
 minio>=7.2.0  # S3-compatible storage client for MinIO

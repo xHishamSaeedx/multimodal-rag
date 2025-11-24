@@ -1,0 +1,102 @@
+Got it — thanks for sharing the config.
+**Your setup is missing the *only thing* Promtail actually needs to read Docker logs: the container log file path.**
+
+Your `promtail-config.yml` shows this:
+
+### ❌ You're using:
+
+```yaml
+docker_sd_configs:
+  - host: unix:///var/run/docker.sock
+```
+
+This *only discovers the containers*, but Promtail **still cannot read the logs**, because you did *not* specify the actual log file path:
+
+```
+/var/lib/docker/containers/*/*-json.log
+```
+
+As a result:
+
+* Promtail **sees** the containers
+* But it **does not ingest their logs**
+
+Elasticsearch appears because its Docker setup produces multi-stream logs that get interpreted as driver logs — but MinIO, Qdrant, Promtail itself, etc., *all just write JSON to docker logs* → so Promtail gets **zero logs** for them.
+
+---
+
+# ✅ **What you MUST add (critical)**
+
+Add this block under that job:
+
+```yaml
+    pipeline_stages:
+      - docker: {}
+
+    relabel_configs:
+      - source_labels: ['__meta_docker_container_logpath']
+        target_label: '__path__'
+```
+
+This line is the key:
+
+```
+__meta_docker_container_logpath → __path__
+```
+
+Because Promtail automatically extracts:
+
+```
+/var/lib/docker/containers/<id>/<id>-json.log
+```
+
+from the docker socket **but does NOT use it** unless you map it to `__path__`.
+
+---
+
+# 🔧 Updated working config
+
+Here is the **fully correct** job:
+
+```yaml
+scrape_configs:
+  - job_name: docker-containers
+    docker_sd_configs:
+      - host: unix:///var/run/docker.sock
+        refresh_interval: 5s
+
+    pipeline_stages:
+      - docker: {}
+
+    relabel_configs:
+      - source_labels: ['__meta_docker_container_name']
+        target_label: 'container'
+      - source_labels: ['__meta_docker_container_logpath']
+        target_label: '__path__'
+```
+
+---
+
+# 🚨 ALSO IMPORTANT: Promtail must have this volume in docker-compose
+
+If your Promtail container does *not* have this volume:
+
+```yaml
+- /var/lib/docker/containers:/var/lib/docker/containers:ro
+```
+
+then even with the correct config, it **cannot read logs**.
+
+---
+
+# 🎯 TL;DR
+
+Your config discovers containers but **never assigns their log file path**, so no logs get ingested except Elasticsearch (which behaves differently).
+
+▶ **Add relabel_configs → map logpath → **path****
+▶ **Add docker: {} pipeline stage**
+▶ **Ensure /var/lib/docker/containers is mounted**
+
+---
+
+If you want, send me your **docker-compose for Promtail**, and I’ll correct it so everything starts working immediately.

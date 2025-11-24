@@ -27,6 +27,8 @@ services:
       retries: 5
     networks:
       - rag-network
+    labels:
+      - "logging=promtail"
 
   # Elasticsearch - BM25 Sparse Index
   elasticsearch:
@@ -49,49 +51,52 @@ services:
       retries: 5
     networks:
       - rag-network
-
-  # Backend API - FastAPI Application
-  backend:
-    build:
-      context: ./backend
-      dockerfile: Dockerfile
-    container_name: multimodal-rag-backend
-    ports:
-      - "8000:8000"
-    environment:
-      # Override service hostnames to use Docker service names
-      - QDRANT_HOST=qdrant
-      - ELASTICSEARCH_URL=http://elasticsearch:9200
-      - MINIO_ENDPOINT=minio:9000
-      # Development settings
-      - DEBUG=true
-      - ENVIRONMENT=development
-    volumes:
-      # Mount code for hot-reload (changes reflect immediately)
-      - ./backend:/app
-      # Exclude __pycache__ and other build artifacts
-      - /app/__pycache__
-      - /app/.pytest_cache
-    # GPU support for CUDA acceleration
-    deploy:
-      resources:
-        reservations:
-          devices:
-            - driver: nvidia
-              count: 1
-              capabilities: [gpu]
-    depends_on:
-      qdrant:
-        condition: service_started
-      elasticsearch:
-        condition: service_healthy
-      minio:
-        condition: service_healthy
-    networks:
-      - rag-network
-    restart: unless-stopped
     labels:
       - "logging=promtail"
+
+  # Backend API - FastAPI Application
+  # COMMENTED OUT: Running backend locally instead of in Docker
+  # backend:
+  #   build:
+  #     context: ./backend
+  #     dockerfile: Dockerfile
+  #   container_name: multimodal-rag-backend
+  #   ports:
+  #     - "8000:8000"
+  #   environment:
+  #     # Override service hostnames to use Docker service names
+  #     - QDRANT_HOST=qdrant
+  #     - ELASTICSEARCH_URL=http://elasticsearch:9200
+  #     - MINIO_ENDPOINT=minio:9000
+  #     # Development settings
+  #     - DEBUG=true
+  #     - ENVIRONMENT=development
+  #   volumes:
+  #     # Mount code for hot-reload (changes reflect immediately)
+  #     - ./backend:/app
+  #     # Exclude __pycache__ and other build artifacts
+  #     - /app/__pycache__
+  #     - /app/.pytest_cache
+  #   # GPU support for CUDA acceleration
+  #   deploy:
+  #     resources:
+  #       reservations:
+  #         devices:
+  #           - driver: nvidia
+  #             count: 1
+  #             capabilities: [gpu]
+  #   depends_on:
+  #     qdrant:
+  #       condition: service_started
+  #     elasticsearch:
+  #       condition: service_healthy
+  #     minio:
+  #       condition: service_healthy
+  #   networks:
+  #     - rag-network
+  #   restart: unless-stopped
+  #   labels:
+  #     - "logging=promtail"
 
   # MinIO - Raw Data Lake (S3-compatible storage)
   minio:
