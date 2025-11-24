@@ -1,0 +1,115 @@
+{
+  "file_path": "C:\\Users\\m_his\\Downloads\\tiny_tables_hidden.pdf",
+  "file_type": ".pdf",
+  "table_count": 2,
+  "tables": [
+    {
+      "table_index": 1,
+      "page": 1,
+      "accuracy": 99.99999999999999,
+      "method": "camelot-lattice",
+      "data": [
+        [
+          "N",
+          "A",
+          "D"
+        ],
+        [
+          "H",
+          "22",
+          "CS"
+        ],
+        [
+          "A",
+          "21",
+          "EE"
+        ],
+        [
+          "R",
+          "23",
+          "ME"
+        ]
+      ],
+      "headers": [
+        "N",
+        "A",
+        "D"
+      ],
+      "rows": [
+        [
+          "H",
+          "22",
+          "CS"
+        ],
+        [
+          "A",
+          "21",
+          "EE"
+        ],
+        [
+          "R",
+          "23",
+          "ME"
+        ]
+      ]
+    },
+    {
+      "table_index": 2,
+      "page": 2,
+      "accuracy": 100.0,
+      "method": "camelot-lattice",
+      "data": [
+        [
+          "P",
+          "S",
+          "Hrs",
+          "O"
+        ],
+        [
+          "RAG",
+          "IP",
+          "120",
+          "H"
+        ],
+        [
+          "UI",
+          "C",
+          "45",
+          "A"
+        ],
+        [
+          "ETL",
+          "P",
+          "0",
+          "R"
+        ]
+      ],
+      "headers": [
+        "P",
+        "S",
+        "Hrs",
+        "O"
+      ],
+      "rows": [
+        [
+          "RAG",
+          "IP",
+          "120",
+          "H"
+        ],
+        [
+          "UI",
+          "C",
+          "45",
+          "A"
+        ],
+        [
+          "ETL",
+          "P",
+          "0",
+          "R"
+        ]
+      ]
+    }
+  ]
+}

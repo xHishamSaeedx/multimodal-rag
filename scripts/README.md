@@ -2,6 +2,94 @@
 
 This directory contains initialization and setup scripts for the multimodal RAG system.
 
+## Table Extraction Script
+
+### Extract Tables from PDF and DOCX Files
+
+A standalone script to extract tables from PDF and DOCX files for testing and development.
+
+**Prerequisites**:
+
+```bash
+# For PDF table extraction (required)
+pip install camelot-py[cv]
+
+# Optional: tabula-py as fallback for difficult PDFs
+pip install tabula-py
+
+# For DOCX table extraction (already in requirements.txt)
+pip install python-docx
+```
+
+**Usage**:
+
+```bash
+# Extract tables from a PDF file (tries multiple methods automatically)
+python scripts/extract_tables.py path/to/file.pdf
+
+# Extract tables from a DOCX file
+python scripts/extract_tables.py path/to/file.docx
+
+# Save output to a JSON file
+python scripts/extract_tables.py path/to/file.pdf --output tables.json
+
+# Output in markdown format
+python scripts/extract_tables.py path/to/file.pdf --format markdown
+
+# Save markdown output to file
+python scripts/extract_tables.py path/to/file.pdf --format markdown --output tables.md
+
+# Force a specific extraction method
+python scripts/extract_tables.py path/to/file.pdf --method camelot-stream
+python scripts/extract_tables.py path/to/file.pdf --method tabula
+```
+
+**Options**:
+
+- `file_path`: Path to the PDF or DOCX file (required)
+- `--output`, `-o`: Output file path (optional, prints to stdout if not specified)
+- `--format`, `-f`: Output format - `json` (default) or `markdown`
+- `--method`, `-m`: Extraction method for PDFs - `auto` (tries all methods), `camelot-lattice`, `camelot-stream`, or `tabula` (default: `auto`)
+
+**Extraction Methods**:
+
+- **auto** (default): Tries multiple methods in order:
+  1. `camelot-lattice` - Best for tables with visible borders/lines
+  2. `camelot-stream` - Best for tables without visible borders
+  3. `tabula` - Fallback method using tabula-py
+- **camelot-lattice**: Uses camelot with lattice detection (requires visible table borders)
+- **camelot-stream**: Uses camelot with stream detection (works for tables without borders)
+- **tabula**: Uses tabula-py library (alternative extraction method)
+
+**Note**: The script automatically filters out empty tables and cleans up extracted data.
+
+**Output Formats**:
+
+- **JSON**: Structured data with table information, headers, rows, and metadata
+- **Markdown**: Human-readable markdown tables with headers and separators
+
+**Example Output (JSON)**:
+
+```json
+{
+  "file_path": "document.pdf",
+  "file_type": ".pdf",
+  "table_count": 2,
+  "tables": [
+    {
+      "table_index": 1,
+      "page": 1,
+      "accuracy": 95.5,
+      "data": [["Header1", "Header2"], ["Value1", "Value2"]],
+      "headers": ["Header1", "Header2"],
+      "rows": [["Value1", "Value2"]]
+    }
+  ]
+}
+```
+
+**Note**: This is a standalone testing/development script. For production use, table extraction will be integrated into the backend service.
+
 ## Qdrant Setup
 
 ### Prerequisites
