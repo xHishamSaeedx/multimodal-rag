@@ -18,6 +18,10 @@ CREATE TABLE IF NOT EXISTS chunks (
     chunk_text TEXT NOT NULL,
     chunk_index INTEGER NOT NULL,
     chunk_type TEXT DEFAULT 'text',
+    table_data JSONB,  -- For table chunks (Phase 2)
+    image_path TEXT,   -- Path to image file (Phase 2)
+    image_caption TEXT, -- Optional caption for images (Phase 2)
+    embedding_type TEXT DEFAULT 'text', -- text, table, image (Phase 2)
     metadata JSONB DEFAULT '{}'::jsonb  -- page_number, section, etc.
 );
 
@@ -34,10 +38,54 @@ CREATE INDEX IF NOT EXISTS chunks_chunk_index_idx ON chunks(document_id, chunk_i
 CREATE INDEX IF NOT EXISTS chunks_chunk_type_idx ON chunks(chunk_type);
 CREATE INDEX IF NOT EXISTS chunks_created_at_idx ON chunks(created_at);
 CREATE INDEX IF NOT EXISTS chunks_metadata_idx ON chunks USING GIN(metadata);
+CREATE INDEX IF NOT EXISTS chunks_embedding_type_idx ON chunks(embedding_type);
+CREATE INDEX IF NOT EXISTS chunks_image_path_idx ON chunks(image_path) WHERE image_path IS NOT NULL;
+
+-- Create images table (Phase 2: Multimodal Support)
+CREATE TABLE IF NOT EXISTS images (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT now(),
+    document_id UUID NOT NULL REFERENCES documents(id) ON UPDATE CASCADE ON DELETE CASCADE,
+    chunk_id UUID REFERENCES chunks(id) ON UPDATE CASCADE ON DELETE SET NULL,
+    image_path TEXT NOT NULL,
+    image_type TEXT,  -- diagram, chart, photo, screenshot
+    extracted_text TEXT,  -- OCR text if applicable
+    caption TEXT,
+    metadata JSONB DEFAULT '{}'::jsonb  -- dimensions, format, page_number
+);
+
+-- Create tables table (Phase 2: Multimodal Support)
+CREATE TABLE IF NOT EXISTS tables (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT now(),
+    document_id UUID NOT NULL REFERENCES documents(id) ON UPDATE CASCADE ON DELETE CASCADE,
+    chunk_id UUID REFERENCES chunks(id) ON UPDATE CASCADE ON DELETE SET NULL,
+    table_data JSONB NOT NULL,  -- Structured table data
+    table_markdown TEXT,  -- Markdown representation
+    table_text TEXT,  -- Flattened text representation
+    metadata JSONB DEFAULT '{}'::jsonb  -- row_count, col_count, headers
+);
+
+-- Create indexes for images table
+CREATE INDEX IF NOT EXISTS images_document_id_idx ON images(document_id);
+CREATE INDEX IF NOT EXISTS images_chunk_id_idx ON images(chunk_id);
+CREATE INDEX IF NOT EXISTS images_image_path_idx ON images(image_path);
+CREATE INDEX IF NOT EXISTS images_image_type_idx ON images(image_type);
+CREATE INDEX IF NOT EXISTS images_created_at_idx ON images(created_at);
+CREATE INDEX IF NOT EXISTS images_metadata_idx ON images USING GIN(metadata);
+
+-- Create indexes for tables table
+CREATE INDEX IF NOT EXISTS tables_document_id_idx ON tables(document_id);
+CREATE INDEX IF NOT EXISTS tables_chunk_id_idx ON tables(chunk_id);
+CREATE INDEX IF NOT EXISTS tables_created_at_idx ON tables(created_at);
+CREATE INDEX IF NOT EXISTS tables_table_data_idx ON tables USING GIN(table_data);
+CREATE INDEX IF NOT EXISTS tables_metadata_idx ON tables USING GIN(metadata);
 
 -- Enable Row Level Security
 ALTER TABLE documents ENABLE ROW LEVEL SECURITY;
 ALTER TABLE chunks ENABLE ROW LEVEL SECURITY;
+ALTER TABLE images ENABLE ROW LEVEL SECURITY;
+ALTER TABLE tables ENABLE ROW LEVEL SECURITY;
 
 -- RLS Policies for documents table
 -- Policy: Authenticated users can view all documents
@@ -78,6 +126,48 @@ USING (true);
 
 -- Policy: Authenticated users can delete chunks
 CREATE POLICY "Chunks - Authenticated users can delete" ON chunks
+FOR DELETE TO authenticated
+USING (true);
+
+-- RLS Policies for images table
+-- Policy: Authenticated users can view all images
+CREATE POLICY "Images - Authenticated users can view" ON images
+FOR SELECT TO authenticated
+USING (true);
+
+-- Policy: Authenticated users can insert images
+CREATE POLICY "Images - Authenticated users can insert" ON images
+FOR INSERT TO authenticated
+WITH CHECK (true);
+
+-- Policy: Authenticated users can update images
+CREATE POLICY "Images - Authenticated users can update" ON images
+FOR UPDATE TO authenticated
+USING (true);
+
+-- Policy: Authenticated users can delete images
+CREATE POLICY "Images - Authenticated users can delete" ON images
+FOR DELETE TO authenticated
+USING (true);
+
+-- RLS Policies for tables table
+-- Policy: Authenticated users can view all tables
+CREATE POLICY "Tables - Authenticated users can view" ON tables
+FOR SELECT TO authenticated
+USING (true);
+
+-- Policy: Authenticated users can insert tables
+CREATE POLICY "Tables - Authenticated users can insert" ON tables
+FOR INSERT TO authenticated
+WITH CHECK (true);
+
+-- Policy: Authenticated users can update tables
+CREATE POLICY "Tables - Authenticated users can update" ON tables
+FOR UPDATE TO authenticated
+USING (true);
+
+-- Policy: Authenticated users can delete tables
+CREATE POLICY "Tables - Authenticated users can delete" ON tables
 FOR DELETE TO authenticated
 USING (true);
 
