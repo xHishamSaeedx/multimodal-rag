@@ -714,11 +714,10 @@ Instructions:
 3. **Day 4**: Elasticsearch mapping updates
 
    - Extend index mapping for multimodal content
-   - Test indexing with sample multimodal chunks
+   - Update mapping script for multimodal fields
+   - Verify mapping structure (testing with real data deferred until after extraction services)
 
-4. **Day 5**: Storage utilities updates
-   - Update repositories to handle multimodal chunks
-   - Test storage and retrieval
+**Note**: Day 5 (Storage utilities updates) is deferred until after Week 3, when we have real table and image chunks from extraction services to test with.
 
 ### Week 2: Table Extraction & Embedding
 
@@ -766,6 +765,46 @@ Instructions:
 4. **Day 5**: Integration testing
    - End-to-end image extraction and indexing
    - Test retrieval with image queries
+
+### Week 3.5: Storage Utilities Updates (Deferred from Week 1)
+
+**Prerequisites**: Week 2 and Week 3 must be complete (table and image extraction services ready)
+
+1. **Update repositories to handle multimodal chunks**:
+
+   - **DocumentRepository**:
+
+     - Add methods to store/retrieve from `images` and `tables` tables
+     - Update chunk storage to handle `table_data`, `image_path`, `image_caption` fields
+     - Support `chunk_type` and `embedding_type` fields
+
+   - **VectorRepository**:
+
+     - Extend to store embeddings in `table_chunks` and `image_chunks` collections
+     - Handle different payload structures per collection type
+     - Support table and image embedding storage
+
+   - **SparseRepository**:
+     - Update indexing to include multimodal fields (`chunk_type`, `embedding_type`, `table_markdown`, `image_caption`)
+     - Index extended metadata fields (image_type, table_headers, row_count, col_count)
+     - Support filtering by chunk type and embedding type
+
+2. **Test storage and retrieval** (now possible with real chunks):
+
+   - Test storing text chunks (existing functionality - verify still works)
+   - Test storing table chunks (new - using real extracted tables)
+   - Test storing image chunks (new - using real extracted images)
+   - Verify data integrity across all systems:
+     - Supabase (documents, chunks, images, tables tables)
+     - Qdrant (text_chunks, table_chunks, image_chunks collections)
+     - Elasticsearch (chunks index with multimodal fields)
+     - MinIO (image file storage)
+
+3. **Update ingestion pipeline**:
+
+   - Integrate table extraction into pipeline
+   - Integrate image extraction into pipeline
+   - Ensure end-to-end flow works: extraction → storage → indexing
 
 ### Week 4: Query Router & Multimodal Retrieval
 
@@ -970,12 +1009,13 @@ Instructions:
 - [ ] Set up MLflow (local or server)
 - [ ] Update environment variables (.env file)
 
-### First Milestone
+### First Milestone (After Week 3.5)
 
 - [ ] Can extract tables from a PDF document
 - [ ] Tables are stored in database and embedded
 - [ ] Can extract images from a PDF document
 - [ ] Images are stored and embedded
+- [ ] Storage utilities updated and tested with real chunks
 - [ ] Query router identifies table/image queries
 - [ ] Can retrieve relevant tables/images
 - [ ] Answers include table/image citations
@@ -1047,6 +1087,117 @@ Once Phase 2 is complete and validated, proceed to:
 - [MLflow Documentation](https://mlflow.org/docs/latest/index.html)
 - [PyMuPDF Image Extraction](https://pymupdf.readthedocs.io/)
 - [Sentence Transformers](https://www.sbert.net/)
+
+---
+
+## Quick Reference: Phase 2 Implementation Timeline
+
+### Week 1: Extended Storage & Schema
+
+- **Day 1-2**: Database schema updates (images, tables tables, multimodal fields)
+- **Day 3**: Qdrant collections setup (`table_chunks`, `image_chunks`)
+- **Day 4**: Elasticsearch mapping updates (multimodal fields)
+- **Day 5**: Deferred to Week 3.5 (needs real chunks to test)
+
+### Week 2: Table Extraction & Embedding
+
+- **Day 1-2**: Table extraction service (PDF: camelot/tabula, DOCX: python-docx)
+- **Day 3**: Table processing (JSON, markdown, flattened text conversion)
+- **Day 4**: Table embedding service (flattened text → embeddings → `table_chunks`)
+- **Day 5**: Integration testing (end-to-end table extraction and indexing)
+
+### Week 3: Image Extraction & Embedding
+
+- **Day 1-2**: Image extraction service (PDF: PyMuPDF, DOCX: python-docx, MinIO storage)
+- **Day 3**: Image processing (OCR optional, captioning optional, type classification)
+- **Day 4**: Image embedding service (CLIP/SigLIP → embeddings → `image_chunks`)
+- **Day 5**: Integration testing (end-to-end image extraction and indexing)
+
+### Week 3.5: Storage Utilities Updates (Deferred from Week 1)
+
+- **Update repositories**: DocumentRepository, VectorRepository, SparseRepository for multimodal chunks
+- **Test storage**: Text, table, and image chunks with real data
+- **Update ingestion pipeline**: Integrate table and image extraction
+- **Verify data integrity**: Supabase, Qdrant, Elasticsearch, MinIO
+
+### Week 4: Query Router & Multimodal Retrieval
+
+- **Day 1-2**: Query router (keyword-based + optional LLM-based modality detection)
+- **Day 3**: Multimodal retrieval pipeline (parallel retrieval, merge, deduplication)
+- **Day 4**: Advanced reranking (cross-encoder reranker integration)
+- **Day 5**: Multimodal fusion layer (format chunks for LLM context)
+
+### Week 5: Answer Generation & API Updates
+
+- **Day 1-2**: Enhanced answer generation (multimodal prompts, citations, guardrails)
+- **Day 3**: API endpoint updates (multimodal query endpoint, tables/images endpoints, schemas)
+- **Day 4**: Integration testing (end-to-end queries, all query types, performance)
+- **Day 5**: Bug fixes and refinements
+
+### Week 6: MLOps & Monitoring
+
+- **Day 1-2**: MLflow setup (experiment tracking, logging)
+- **Day 3**: Model registry (embedding models, version control, promotion workflow)
+- **Day 4**: Monitoring and logging (multimodal operations, metrics, error tracking)
+- **Day 5**: Documentation and testing (API docs, examples, test suite)
+
+### Week 7-8: Polish & Optimization
+
+- **Week 7**: Performance optimization, caching, error handling, UX refinements
+- **Week 8**: Comprehensive testing, documentation, demo prep, deployment guide
+
+---
+
+## Phase 2 Completion Checklist
+
+### Infrastructure (Week 1)
+
+- [ ] Database schema extended (images, tables tables)
+- [ ] Qdrant collections created (`table_chunks`, `image_chunks`)
+- [ ] Elasticsearch mapping updated (multimodal fields)
+
+### Extraction Services (Weeks 2-3)
+
+- [ ] Table extraction from PDF/DOCX working
+- [ ] Image extraction from PDF/DOCX working
+- [ ] Tables embedded and stored in `table_chunks`
+- [ ] Images embedded and stored in `image_chunks`
+
+### Storage Layer (Week 3.5)
+
+- [ ] Repositories updated for multimodal chunks
+- [ ] Ingestion pipeline integrated with extraction services
+- [ ] All systems tested with real chunks
+
+### Retrieval System (Week 4)
+
+- [ ] Query router identifies modalities
+- [ ] Multimodal retrieval pipeline working
+- [ ] Reranking improves results
+- [ ] Fusion layer formats chunks for LLM
+
+### User Interface (Week 5)
+
+- [ ] API endpoints support multimodal queries
+- [ ] Answer generation handles tables/images
+- [ ] Citations include modality types
+- [ ] End-to-end testing complete
+
+### Production Readiness (Week 6)
+
+- [ ] MLflow tracking set up
+- [ ] Model registry configured
+- [ ] Monitoring and logging enhanced
+- [ ] Documentation complete
+
+### Final Polish (Weeks 7-8)
+
+- [ ] Performance optimized
+- [ ] Comprehensive testing done
+- [ ] Deployment guide ready
+- [ ] Demo prepared
+
+---
 
 # Next Phases
 
