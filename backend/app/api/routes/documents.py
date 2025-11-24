@@ -21,6 +21,7 @@ from app.api.schemas import (
 from app.services.storage import MinIOStorage
 from app.repositories.document_repository import DocumentRepository, RepositoryError
 from app.repositories.vector_repository import VectorRepository, VectorRepositoryError
+from app.repositories.sparse_repository import SparseRepository, SparseRepositoryError
 from app.utils.exceptions import StorageError
 
 logger = logging.getLogger(__name__)
@@ -252,8 +253,9 @@ async def delete_document(
     
     This performs cascade deletion across all storage systems:
     1. Deletes vectors from Qdrant
-    2. Deletes document and chunks from Supabase
-    3. Deletes file from MinIO (data lake)
+    2. Deletes chunks from Elasticsearch (BM25 index)
+    3. Deletes document and chunks from Supabase
+    4. Deletes file from MinIO (data lake)
     
     Args:
         object_key: Object key (path) of the document to delete
@@ -268,6 +270,7 @@ async def delete_document(
         storage = MinIOStorage()
         doc_repo = DocumentRepository()
         vector_repo = VectorRepository()
+        sparse_repo = SparseRepository()
         
         # Check if document exists in MinIO
         document_exists_in_storage = storage.document_exists(object_key)
@@ -302,7 +305,19 @@ async def delete_document(
                 deletion_errors.append(f"Qdrant: {str(e)}")
                 logger.error(f"Unexpected error deleting vectors from Qdrant: {str(e)}", exc_info=True)
             
-            # 2. Delete from Supabase (document and chunks)
+            # 2. Delete from Elasticsearch (BM25 index)
+            try:
+                sparse_repo.delete_chunks_by_document(document.id)
+                deletion_success.append("Elasticsearch chunks")
+                logger.info(f"Deleted chunks from Elasticsearch for document: {document.id}")
+            except SparseRepositoryError as e:
+                deletion_errors.append(f"Elasticsearch: {e.message}")
+                logger.error(f"Failed to delete chunks from Elasticsearch: {e.message}", exc_info=True)
+            except Exception as e:
+                deletion_errors.append(f"Elasticsearch: {str(e)}")
+                logger.error(f"Unexpected error deleting chunks from Elasticsearch: {str(e)}", exc_info=True)
+            
+            # 3. Delete from Supabase (document and chunks)
             try:
                 doc_repo.delete_document(document.id)
                 deletion_success.append("Supabase document and chunks")
@@ -314,7 +329,7 @@ async def delete_document(
                 deletion_errors.append(f"Supabase: {str(e)}")
                 logger.error(f"Unexpected error deleting from Supabase: {str(e)}", exc_info=True)
         
-        # 3. Delete from MinIO (data lake)
+        # 4. Delete from MinIO (data lake)
         if document_exists_in_storage:
             try:
                 storage.delete_document(object_key)

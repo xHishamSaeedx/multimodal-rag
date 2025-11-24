@@ -1,8 +1,8 @@
 """
-Initialize Elasticsearch index for BM25 sparse search on text chunks.
+Initialize Elasticsearch index for BM25 sparse search on chunks.
 
 This script creates the Elasticsearch index as specified in the Phase 1 documentation:
-- Index name: text_chunks
+- Index name: chunks
 - BM25 similarity scoring (default)
 - Indexed fields: chunk_text, document metadata, filename, timestamps
 """
@@ -134,15 +134,15 @@ def get_index_mapping() -> Dict[str, Any]:
 
 def init_elasticsearch_index(
     elasticsearch_url: str = "http://localhost:9200",
-    index_name: str = "text_chunks",
+    index_name: str = "chunks",
     recreate: bool = False,
 ) -> bool:
     """
-    Initialize or recreate the Elasticsearch index for text chunks.
+    Initialize or recreate the Elasticsearch index for chunks.
 
     Args:
         elasticsearch_url: Elasticsearch server URL (default: http://localhost:9200)
-        index_name: Name of the index (default: text_chunks)
+        index_name: Name of the index (default: chunks)
         recreate: If True, delete existing index and create new one
 
     Returns:
@@ -356,8 +356,8 @@ if __name__ == "__main__":
     )
     parser.add_argument(
         "--index",
-        default="text_chunks",
-        help="Index name (default: text_chunks)",
+        default="chunks",
+        help="Index name (default: chunks)",
     )
     parser.add_argument(
         "--recreate",

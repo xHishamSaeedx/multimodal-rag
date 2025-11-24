@@ -55,7 +55,7 @@ class Settings(BaseSettings):
     
     # Elasticsearch (BM25 Sparse Index) Settings
     elasticsearch_url: str = "http://localhost:9200"
-    elasticsearch_index_name: str = "text_chunks"
+    elasticsearch_index_name: str = "chunks"
     elasticsearch_timeout: int = 30
     
     # Embedding Settings
