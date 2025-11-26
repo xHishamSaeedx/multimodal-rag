@@ -12,7 +12,7 @@ Phase 2 (multimodal):
 - Payload fields: chunk_id, document_id, table_data, table_markdown, metadata
 
 - Collection name: image_chunks
-- Vector dimensions: 512 (CLIP base) or 768 (SigLIP)
+- Vector dimensions: 512 (CLIP base), 768 (SigLIP base), or 1024 (SigLIP large)
 - Payload fields: chunk_id, document_id, image_path, caption, image_type, metadata
 """
 
@@ -48,7 +48,7 @@ except ImportError:
 def init_qdrant_collection(
     qdrant_url: str = "http://localhost:6333",
     collection_name: str = "text_chunks",
-    vector_size: int = 768,  # Default for e5-base-v2/all-mpnet-base-v2 (best quality), can be 384 for all-MiniLM-L6-v2
+    vector_size: int = 768,  # Default for e5-base-v2/all-mpnet-base-v2 (best quality), can be 384 for all-MiniLM-L6-v2, 1024 for SigLIP large
     recreate: bool = False,
 ) -> bool:
     """
@@ -57,7 +57,7 @@ def init_qdrant_collection(
     Args:
         qdrant_url: Qdrant server URL (default: http://localhost:6333)
         collection_name: Name of the collection (default: text_chunks)
-        vector_size: Dimension of the vectors (384, 512, or 768)
+        vector_size: Dimension of the vectors (384, 512, 768, or 1024)
         recreate: If True, delete existing collection and create new one
 
     Returns:
@@ -121,7 +121,7 @@ def init_qdrant_collection(
 
 def init_multimodal_collections(
     qdrant_url: str = "http://localhost:6333",
-    image_vector_size: int = 512,  # 512 for CLIP base, 768 for SigLIP
+    image_vector_size: int = 1024,  # 512 for CLIP base, 768 for SigLIP base, 1024 for SigLIP large (default)
     recreate: bool = False,
 ) -> bool:
     """
@@ -129,7 +129,7 @@ def init_multimodal_collections(
 
     Args:
         qdrant_url: Qdrant server URL (default: http://localhost:6333)
-        image_vector_size: Dimension for image embeddings (512 for CLIP base, 768 for SigLIP)
+        image_vector_size: Dimension for image embeddings (512 for CLIP base, 768 for SigLIP base, 1024 for SigLIP large)
         recreate: If True, delete existing collections and create new ones
 
     Returns:
@@ -182,7 +182,7 @@ def init_multimodal_collections(
 def init_all_collections(
     qdrant_url: str = "http://localhost:6333",
     text_vector_size: int = 768,
-    image_vector_size: int = 512,
+    image_vector_size: int = 1024,
     recreate: bool = False,
 ) -> bool:
     """
@@ -191,7 +191,7 @@ def init_all_collections(
     Args:
         qdrant_url: Qdrant server URL (default: http://localhost:6333)
         text_vector_size: Dimension for text embeddings (384 or 768)
-        image_vector_size: Dimension for image embeddings (512 for CLIP base, 768 for SigLIP)
+        image_vector_size: Dimension for image embeddings (512 for CLIP base, 768 for SigLIP base, 1024 for SigLIP large)
         recreate: If True, delete existing collections and create new ones
 
     Returns:
@@ -253,7 +253,7 @@ def verify_collections(
         expected_collections = {
             "text_chunks": {"vector_size": 768, "description": "Phase 1: Text chunks"},
             "table_chunks": {"vector_size": 768, "description": "Phase 2: Table chunks"},
-            "image_chunks": {"vector_size": [512, 768], "description": "Phase 2: Image chunks"},
+            "image_chunks": {"vector_size": [512, 768, 1024], "description": "Phase 2: Image chunks"},
         }
 
         all_valid = True
@@ -270,7 +270,7 @@ def verify_collections(
                 actual_size = collection_info.config.params.vectors.size
                 expected_size = expected["vector_size"]
 
-                # For image_chunks, accept either 512 or 768
+                # For image_chunks, accept 512, 768, or 1024
                 if collection_name == "image_chunks":
                     if actual_size not in expected_size:
                         print(f"  ❌ Vector size mismatch: expected {expected_size}, got {actual_size}")
@@ -356,8 +356,8 @@ Examples:
     parser.add_argument(
         "--vector-size",
         type=int,
-        choices=[384, 512, 768],
-        help="Vector dimension: 384 for all-MiniLM-L6-v2, 768 for e5-base-v2/all-mpnet-base-v2, 512 for CLIP base (default: 768 for text/table, 512 for image)",
+        choices=[384, 512, 768, 1024],
+        help="Vector dimension: 384 for all-MiniLM-L6-v2, 768 for e5-base-v2/all-mpnet-base-v2, 512 for CLIP base, 1024 for SigLIP large (default: 768 for text/table, 1024 for image)",
     )
     parser.add_argument(
         "--recreate",
@@ -377,9 +377,9 @@ Examples:
     parser.add_argument(
         "--image-vector-size",
         type=int,
-        choices=[512, 768],
-        default=512,
-        help="Vector dimension for image_chunks: 512 for CLIP base (default), 768 for SigLIP",
+        choices=[512, 768, 1024],
+        default=1024,
+        help="Vector dimension for image_chunks: 512 for CLIP base, 768 for SigLIP base, 1024 for SigLIP large (default: 1024)",
     )
     parser.add_argument(
         "--verify",
@@ -416,7 +416,7 @@ Examples:
     if args.all:
         # Create all collections (Phase 1 + Phase 2)
         text_vector_size = args.vector_size or config_vector_size or 768
-        image_vector_size = args.image_vector_size or 512
+        image_vector_size = args.image_vector_size or 1024
         success = init_all_collections(
             qdrant_url=qdrant_url,
             text_vector_size=text_vector_size,
@@ -425,7 +425,7 @@ Examples:
         )
     elif args.multimodal:
         # Create only Phase 2 multimodal collections
-        image_vector_size = args.image_vector_size or 512
+        image_vector_size = args.image_vector_size or 1024
         success = init_multimodal_collections(
             qdrant_url=qdrant_url,
             image_vector_size=image_vector_size,
@@ -437,7 +437,7 @@ Examples:
         
         # Determine vector size based on collection type
         if collection_name == "image_chunks":
-            default_vector_size = args.vector_size or args.image_vector_size or 512
+            default_vector_size = args.vector_size or args.image_vector_size or 1024
         elif collection_name == "table_chunks":
             default_vector_size = args.vector_size or 768
         else:  # text_chunks

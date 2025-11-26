@@ -1,27 +1,200 @@
 #!/usr/bin/env python3
 """
 Simple script to generate a 5-page PDF on the tech sector and its growth trends.
-Includes tables but no graphs.
+Includes tables and charts (bar graphs, pie charts, etc.).
 
 Usage:
     python generate_tech_sector_pdf.py [output_path]
 
 Requirements:
-    pip install reportlab
+    pip install reportlab matplotlib numpy
 """
 
 import sys
+import os
+import tempfile
 from pathlib import Path
+import matplotlib
+matplotlib.use('Agg')  # Use non-interactive backend
+import matplotlib.pyplot as plt
+import numpy as np
 from reportlab.lib.pagesizes import letter
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 from reportlab.lib.units import inch
-from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle, PageBreak
+from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle, PageBreak, Image
 from reportlab.lib import colors
 from reportlab.lib.enums import TA_JUSTIFY, TA_CENTER
 
 
+def create_bar_chart_revenue_growth(temp_dir):
+    """Create a bar chart showing revenue growth over years."""
+    years = ['2020', '2021', '2022', '2023', '2024']
+    revenue = [4.2, 4.8, 5.3, 5.8, 6.4]
+    
+    fig, ax = plt.subplots(figsize=(7, 4))
+    bars = ax.bar(years, revenue, color=['#3949ab', '#5c6bc0', '#7986cb', '#9fa8da', '#c5cae9'])
+    
+    ax.set_xlabel('Year', fontsize=10, fontweight='bold')
+    ax.set_ylabel('Revenue (Trillion USD)', fontsize=10, fontweight='bold')
+    ax.set_title('Global Tech Sector Revenue Growth (2020-2024)', fontsize=12, fontweight='bold', pad=15)
+    ax.grid(axis='y', alpha=0.3, linestyle='--')
+    ax.set_ylim(0, 7)
+    
+    # Add value labels on bars
+    for bar in bars:
+        height = bar.get_height()
+        ax.text(bar.get_x() + bar.get_width()/2., height,
+                f'{height:.1f}T',
+                ha='center', va='bottom', fontsize=9, fontweight='bold')
+    
+    plt.tight_layout()
+    chart_path = os.path.join(temp_dir, 'revenue_growth.png')
+    plt.savefig(chart_path, dpi=150, bbox_inches='tight')
+    plt.close()
+    return chart_path
+
+
+def create_pie_chart_market_share(temp_dir):
+    """Create a pie chart showing market share by technology segment."""
+    segments = ['Software & Services', 'Cloud Computing', 'Hardware & Devices', 
+                'Telecommunications', 'Cybersecurity', 'AI & ML', 'Other']
+    market_share = [38, 22, 18, 12, 5, 3, 2]
+    colors_pie = ['#3949ab', '#5c6bc0', '#7986cb', '#9fa8da', '#c5cae9', '#e8eaf6', '#f3e5f5']
+    
+    # Create labels with percentages for legend
+    legend_labels = [f'{seg}: {share}%' for seg, share in zip(segments, market_share)]
+    
+    fig, ax = plt.subplots(figsize=(8, 6))
+    
+    # Create pie chart without labels on the chart itself
+    wedges, texts, autotexts = ax.pie(market_share, labels=None, autopct='',
+                                      colors=colors_pie, startangle=90,
+                                      pctdistance=0.85, labeldistance=1.1)
+    
+    # Only show percentage labels on larger segments (>= 5%)
+    for i, (wedge, share) in enumerate(zip(wedges, market_share)):
+        if share >= 5:
+            angle = (wedge.theta2 + wedge.theta1) / 2
+            x = np.cos(np.deg2rad(angle))
+            y = np.sin(np.deg2rad(angle))
+            ax.text(x * 0.7, y * 0.7, f'{share}%',
+                   ha='center', va='center', fontsize=11, fontweight='bold',
+                   color='white' if share >= 12 else 'black')
+    
+    ax.set_title('Market Share by Technology Segment (2024)', fontsize=13, fontweight='bold', pad=20)
+    
+    # Add legend with all segments and percentages
+    ax.legend(wedges, legend_labels, loc='center left', bbox_to_anchor=(1, 0.5),
+              fontsize=10, frameon=True, fancybox=True, shadow=True)
+    
+    plt.tight_layout()
+    chart_path = os.path.join(temp_dir, 'market_share.png')
+    plt.savefig(chart_path, dpi=150, bbox_inches='tight')
+    plt.close()
+    return chart_path
+
+
+def create_bar_chart_regional_markets(temp_dir):
+    """Create a bar chart showing regional market sizes."""
+    regions = ['North\nAmerica', 'Asia-\nPacific', 'Europe', 'Latin\nAmerica', 'MENA']
+    market_size = [2560, 2048, 1280, 384, 128]
+    
+    fig, ax = plt.subplots(figsize=(7, 4))
+    bars = ax.bar(regions, market_size, color=['#3949ab', '#5c6bc0', '#7986cb', '#9fa8da', '#c5cae9'])
+    
+    ax.set_xlabel('Region', fontsize=10, fontweight='bold')
+    ax.set_ylabel('Market Size (Billion USD)', fontsize=10, fontweight='bold')
+    ax.set_title('Regional Technology Market Overview (2024)', fontsize=12, fontweight='bold', pad=15)
+    ax.grid(axis='y', alpha=0.3, linestyle='--')
+    
+    # Add value labels on bars
+    for bar in bars:
+        height = bar.get_height()
+        ax.text(bar.get_x() + bar.get_width()/2., height,
+                f'${height:,.0f}B',
+                ha='center', va='bottom', fontsize=9, fontweight='bold')
+    
+    plt.tight_layout()
+    chart_path = os.path.join(temp_dir, 'regional_markets.png')
+    plt.savefig(chart_path, dpi=150, bbox_inches='tight')
+    plt.close()
+    return chart_path
+
+
+def create_bar_chart_employment(temp_dir):
+    """Create a bar chart showing employment by category."""
+    categories = ['Software\nDev', 'IT\nSupport', 'Cybersecurity', 'Data\nScience', 
+                  'Cloud\nArchitecture', 'AI/ML\nEngineering']
+    employment = [26.8, 18.3, 4.1, 3.9, 2.7, 1.2]
+    
+    fig, ax = plt.subplots(figsize=(7, 4))
+    bars = ax.bar(categories, employment, color=['#3949ab', '#5c6bc0', '#7986cb', '#9fa8da', '#c5cae9', '#e8eaf6'])
+    
+    ax.set_xlabel('Job Category', fontsize=10, fontweight='bold')
+    ax.set_ylabel('Employment (Millions)', fontsize=10, fontweight='bold')
+    ax.set_title('Technology Sector Employment Statistics', fontsize=12, fontweight='bold', pad=15)
+    ax.grid(axis='y', alpha=0.3, linestyle='--')
+    
+    # Add value labels on bars
+    for bar in bars:
+        height = bar.get_height()
+        ax.text(bar.get_x() + bar.get_width()/2., height,
+                f'{height:.1f}M',
+                ha='center', va='bottom', fontsize=8, fontweight='bold')
+    
+    plt.tight_layout()
+    chart_path = os.path.join(temp_dir, 'employment.png')
+    plt.savefig(chart_path, dpi=150, bbox_inches='tight')
+    plt.close()
+    return chart_path
+
+
+def create_bar_chart_projected_growth(temp_dir):
+    """Create a bar chart showing projected growth by technology area."""
+    tech_areas = ['AI', 'Cloud\nComputing', 'Cybersecurity', 'Edge\nComputing', 
+                  'Blockchain', 'Quantum\nComputing', 'IoT\nSolutions']
+    cagr = [23.0, 19.8, 20.2, 31.7, 31.5, 50.0, 24.4]
+    
+    fig, ax = plt.subplots(figsize=(7, 4))
+    bars = ax.bar(tech_areas, cagr, color=['#3949ab', '#5c6bc0', '#7986cb', '#9fa8da', '#c5cae9', '#e8eaf6', '#f3e5f5'])
+    
+    ax.set_xlabel('Technology Area', fontsize=10, fontweight='bold')
+    ax.set_ylabel('CAGR (%)', fontsize=10, fontweight='bold')
+    ax.set_title('Projected Growth by Technology Area (2025-2027)', fontsize=12, fontweight='bold', pad=15)
+    ax.grid(axis='y', alpha=0.3, linestyle='--')
+    
+    # Add value labels on bars
+    for bar in bars:
+        height = bar.get_height()
+        ax.text(bar.get_x() + bar.get_width()/2., height,
+                f'{height:.1f}%',
+                ha='center', va='bottom', fontsize=8, fontweight='bold')
+    
+    plt.tight_layout()
+    chart_path = os.path.join(temp_dir, 'projected_growth.png')
+    plt.savefig(chart_path, dpi=150, bbox_inches='tight')
+    plt.close()
+    return chart_path
+
+
 def create_tech_sector_pdf(output_path: str = "tech_sector_report.pdf"):
-    """Generate a 5-page PDF on the tech sector with tables."""
+    """Generate a 5-page PDF on the tech sector with tables and charts."""
+    
+    # Create temporary directory for chart images
+    temp_dir = tempfile.mkdtemp()
+    chart_paths = []
+    
+    # Generate all charts
+    try:
+        print("Generating charts...")
+        chart_paths.append(create_bar_chart_revenue_growth(temp_dir))
+        chart_paths.append(create_pie_chart_market_share(temp_dir))
+        chart_paths.append(create_bar_chart_regional_markets(temp_dir))
+        chart_paths.append(create_bar_chart_employment(temp_dir))
+        chart_paths.append(create_bar_chart_projected_growth(temp_dir))
+    except Exception as e:
+        print(f"Error generating charts: {e}")
+        raise
     
     # Create PDF document
     doc = SimpleDocTemplate(output_path, pagesize=letter,
@@ -149,6 +322,11 @@ def create_tech_sector_pdf(output_path: str = "tech_sector_report.pdf"):
     ]))
     
     story.append(table1)
+    story.append(Spacer(1, 0.2*inch))
+    
+    # Add revenue growth bar chart
+    revenue_chart = Image(chart_paths[0], width=5.5*inch, height=3*inch)
+    story.append(revenue_chart)
     story.append(Spacer(1, 0.3*inch))
     
     story.append(Paragraph("Historical Context and Market Drivers", heading_style))
@@ -268,6 +446,11 @@ def create_tech_sector_pdf(output_path: str = "tech_sector_report.pdf"):
     ]))
     
     story.append(table2)
+    story.append(Spacer(1, 0.2*inch))
+    
+    # Add market share pie chart
+    market_chart = Image(chart_paths[1], width=5.5*inch, height=3.5*inch)
+    story.append(market_chart)
     story.append(Spacer(1, 0.3*inch))
     
     story.append(Paragraph("Cloud Computing Expansion", heading_style))
@@ -420,6 +603,11 @@ def create_tech_sector_pdf(output_path: str = "tech_sector_report.pdf"):
     ]))
     
     story.append(table3)
+    story.append(Spacer(1, 0.2*inch))
+    
+    # Add regional markets bar chart
+    regional_chart = Image(chart_paths[2], width=5.5*inch, height=3*inch)
+    story.append(regional_chart)
     story.append(Spacer(1, 0.3*inch))
     
     story.append(Paragraph(
@@ -552,6 +740,11 @@ def create_tech_sector_pdf(output_path: str = "tech_sector_report.pdf"):
     ]))
     
     story.append(table4)
+    story.append(Spacer(1, 0.2*inch))
+    
+    # Add employment bar chart
+    employment_chart = Image(chart_paths[3], width=5.5*inch, height=3*inch)
+    story.append(employment_chart)
     story.append(Spacer(1, 0.3*inch))
     
     story.append(Paragraph("Remote Work and Distributed Teams", heading_style))
@@ -684,6 +877,11 @@ def create_tech_sector_pdf(output_path: str = "tech_sector_report.pdf"):
     ]))
     
     story.append(table5)
+    story.append(Spacer(1, 0.2*inch))
+    
+    # Add projected growth bar chart
+    growth_chart = Image(chart_paths[4], width=5.5*inch, height=3*inch)
+    story.append(growth_chart)
     story.append(Spacer(1, 0.3*inch))
     
     story.append(Paragraph("Key Challenges and Opportunities", heading_style))
@@ -766,8 +964,31 @@ def create_tech_sector_pdf(output_path: str = "tech_sector_report.pdf"):
     ))
     
     # Build PDF
-    doc.build(story)
-    print(f"PDF successfully generated: {output_path}")
+    try:
+        doc.build(story)
+        print(f"PDF successfully generated: {output_path}")
+    except PermissionError:
+        print(f"\nError: Permission denied when trying to write to '{output_path}'")
+        print("This usually means the file is open in another program (PDF viewer, etc.).")
+        print("Please close the file and try again, or specify a different output path.")
+        print(f"\nExample: python {sys.argv[0]} tech_sector_report_new.pdf")
+        raise
+    except Exception as e:
+        print(f"\nError generating PDF: {e}")
+        raise
+    finally:
+        # Clean up temporary chart files
+        import shutil
+        for chart_path in chart_paths:
+            if os.path.exists(chart_path):
+                try:
+                    os.remove(chart_path)
+                except:
+                    pass
+        try:
+            shutil.rmtree(temp_dir)
+        except:
+            pass
 
 
 if __name__ == "__main__":
