@@ -106,9 +106,201 @@
 
 .message-text {
   line-height: 1.6;
-  white-space: pre-wrap;
   word-wrap: break-word;
   margin-bottom: 0.5rem;
+}
+
+/* Markdown styling */
+.message-text h1,
+.message-text h2,
+.message-text h3,
+.message-text h4,
+.message-text h5,
+.message-text h6 {
+  margin-top: 1.5em;
+  margin-bottom: 0.5em;
+  font-weight: 600;
+  line-height: 1.25;
+}
+
+.message-text h1 {
+  font-size: 2em;
+  border-bottom: 1px solid rgba(0, 0, 0, 0.1);
+  padding-bottom: 0.3em;
+}
+
+.message-text h2 {
+  font-size: 1.5em;
+  border-bottom: 1px solid rgba(0, 0, 0, 0.1);
+  padding-bottom: 0.3em;
+}
+
+.message-text h3 {
+  font-size: 1.25em;
+}
+
+.message-text h4 {
+  font-size: 1em;
+}
+
+.message-text h5 {
+  font-size: 0.875em;
+}
+
+.message-text h6 {
+  font-size: 0.85em;
+  color: #666;
+}
+
+.message-text p {
+  margin-bottom: 1em;
+}
+
+.message-text ul,
+.message-text ol {
+  margin-bottom: 1em;
+  padding-left: 2em;
+}
+
+.message-text li {
+  margin-bottom: 0.5em;
+}
+
+.message-text li > p {
+  margin-bottom: 0.5em;
+}
+
+.message-text code {
+  background-color: rgba(0, 0, 0, 0.05);
+  padding: 0.2em 0.4em;
+  border-radius: 3px;
+  font-size: 0.9em;
+  font-family: 'Courier New', monospace;
+}
+
+.assistant-message .message-text code {
+  background-color: rgba(0, 0, 0, 0.1);
+}
+
+.user-message .message-text code {
+  background-color: rgba(255, 255, 255, 0.2);
+}
+
+.message-text pre {
+  background-color: rgba(0, 0, 0, 0.05);
+  padding: 1em;
+  border-radius: 6px;
+  overflow-x: auto;
+  margin-bottom: 1em;
+}
+
+.assistant-message .message-text pre {
+  background-color: rgba(0, 0, 0, 0.05);
+}
+
+.user-message .message-text pre {
+  background-color: rgba(255, 255, 255, 0.1);
+}
+
+.message-text pre code {
+  background-color: transparent;
+  padding: 0;
+  font-size: 0.9em;
+}
+
+.message-text blockquote {
+  border-left: 4px solid rgba(0, 0, 0, 0.2);
+  padding-left: 1em;
+  margin: 1em 0;
+  color: #666;
+  font-style: italic;
+}
+
+.message-text a {
+  color: #0066cc;
+  text-decoration: underline;
+}
+
+.message-text a:hover {
+  color: #0052a3;
+}
+
+.user-message .message-text a {
+  color: #66b3ff;
+}
+
+.user-message .message-text a:hover {
+  color: #99ccff;
+}
+
+/* Table styling */
+.message-text table {
+  border-collapse: collapse;
+  width: 100%;
+  margin: 1em 0;
+  display: block;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+.message-text table thead {
+  background-color: rgba(0, 0, 0, 0.05);
+}
+
+.assistant-message .message-text table thead {
+  background-color: rgba(0, 0, 0, 0.1);
+}
+
+.user-message .message-text table thead {
+  background-color: rgba(255, 255, 255, 0.2);
+}
+
+.message-text table th,
+.message-text table td {
+  border: 1px solid rgba(0, 0, 0, 0.1);
+  padding: 0.75em 1em;
+  text-align: left;
+}
+
+.message-text table th {
+  font-weight: 600;
+}
+
+.message-text table tbody tr:nth-child(even) {
+  background-color: rgba(0, 0, 0, 0.02);
+}
+
+.assistant-message .message-text table tbody tr:nth-child(even) {
+  background-color: rgba(0, 0, 0, 0.05);
+}
+
+.user-message .message-text table tbody tr:nth-child(even) {
+  background-color: rgba(255, 255, 255, 0.1);
+}
+
+.message-text table tbody tr:hover {
+  background-color: rgba(0, 0, 0, 0.05);
+}
+
+.assistant-message .message-text table tbody tr:hover {
+  background-color: rgba(0, 0, 0, 0.08);
+}
+
+.user-message .message-text table tbody tr:hover {
+  background-color: rgba(255, 255, 255, 0.15);
+}
+
+.message-text hr {
+  border: none;
+  border-top: 1px solid rgba(0, 0, 0, 0.1);
+  margin: 1.5em 0;
+}
+
+.message-text img {
+  max-width: 100%;
+  height: auto;
+  border-radius: 6px;
+  margin: 1em 0;
 }
 
 .message-sources {

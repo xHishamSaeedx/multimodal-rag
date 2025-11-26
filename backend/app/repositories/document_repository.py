@@ -315,7 +315,7 @@ class DocumentRepository:
     
     def delete_document(self, document_id: UUID) -> bool:
         """
-        Delete a document and its chunks.
+        Delete a document and its chunks and tables.
         
         Note: This should cascade delete chunks if foreign key constraints are set up.
         
@@ -329,7 +329,11 @@ class DocumentRepository:
             RepositoryError: If deletion fails
         """
         try:
-            # Delete chunks first (if cascade is not set up)
+            # Delete tables first (associated with document)
+            self.client.table("tables").delete().eq("document_id", str(document_id)).execute()
+            logger.debug(f"Deleted tables for document: {document_id}")
+            
+            # Delete chunks (if cascade is not set up)
             self.client.table(self.chunks_table).delete().eq("document_id", str(document_id)).execute()
             
             # Delete document
@@ -356,6 +360,138 @@ class DocumentRepository:
             raise RepositoryError(
                 f"Failed to delete document: {str(e)}",
                 {"document_id": str(document_id), "error": str(e)},
+            ) from e
+    
+    def create_table(
+        self,
+        document_id: UUID,
+        chunk_id: UUID,
+        table_data: Dict[str, Any],
+        table_markdown: str,
+        table_text: str,
+        metadata: Optional[Dict[str, Any]] = None,
+    ) -> UUID:
+        """
+        Create a table record in the tables table.
+        
+        Args:
+            document_id: Parent document UUID
+            chunk_id: Associated chunk UUID
+            table_data: Structured table data (JSON format)
+            table_markdown: Markdown representation
+            table_text: Flattened text representation
+            metadata: Additional metadata (row_count, col_count, headers, etc.)
+        
+        Returns:
+            Table UUID
+        """
+        try:
+            table_id = uuid4()
+            now = datetime.utcnow().isoformat()
+            
+            table_record = {
+                "id": str(table_id),
+                "document_id": str(document_id),
+                "chunk_id": str(chunk_id),
+                "table_data": table_data,
+                "table_markdown": table_markdown,
+                "table_text": table_text,
+                "metadata": metadata or {},
+                "created_at": now,
+            }
+            
+            logger.debug(f"Creating table record: {table_id} for document: {document_id}")
+            
+            result = self.client.table("tables").insert(table_record).execute()
+            
+            if not result.data:
+                raise RepositoryError(
+                    "Failed to create table: No data returned",
+                    {"table_id": str(table_id), "document_id": str(document_id)},
+                )
+            
+            logger.info(f"Created table record: {table_id}")
+            return table_id
+        
+        except Exception as e:
+            if isinstance(e, (RepositoryError, DatabaseError)):
+                raise
+            logger.error(f"Error creating table: {str(e)}", exc_info=True)
+            raise RepositoryError(
+                f"Failed to create table: {str(e)}",
+                {"document_id": str(document_id), "error": str(e)},
+            ) from e
+    
+    def create_tables_batch(
+        self,
+        document_id: UUID,
+        tables_data: List[Dict[str, Any]],
+    ) -> List[UUID]:
+        """
+        Create multiple table records in batch.
+        
+        Args:
+            document_id: Parent document UUID
+            tables_data: List of table data dictionaries, each containing:
+                - chunk_id: UUID
+                - table_data: Dict (JSON format)
+                - table_markdown: str
+                - table_text: str
+                - metadata: Dict (optional)
+        
+        Returns:
+            List of created table UUIDs
+        """
+        try:
+            if not tables_data:
+                logger.warning(f"No tables to create for document: {document_id}")
+                return []
+            
+            logger.debug(f"Creating {len(tables_data)} table(s) for document: {document_id}")
+            
+            now = datetime.utcnow().isoformat()
+            tables_records = []
+            
+            for table_info in tables_data:
+                table_id = uuid4()
+                table_record = {
+                    "id": str(table_id),
+                    "document_id": str(document_id),
+                    "chunk_id": str(table_info["chunk_id"]),
+                    "table_data": table_info["table_data"],
+                    "table_markdown": table_info["table_markdown"],
+                    "table_text": table_info["table_text"],
+                    "metadata": table_info.get("metadata", {}),
+                    "created_at": now,
+                }
+                tables_records.append(table_record)
+            
+            # Insert in batches
+            batch_size = 100
+            created_ids = []
+            
+            for i in range(0, len(tables_records), batch_size):
+                batch = tables_records[i:i + batch_size]
+                result = self.client.table("tables").insert(batch).execute()
+                
+                if result.data:
+                    batch_ids = [UUID(item["id"]) for item in result.data]
+                    created_ids.extend(batch_ids)
+                    logger.debug(
+                        f"Created batch of {len(batch_ids)} tables "
+                        f"({i + 1}-{min(i + batch_size, len(tables_records))} of {len(tables_records)})"
+                    )
+            
+            logger.info(f"Created {len(created_ids)} table(s) for document: {document_id}")
+            return created_ids
+        
+        except Exception as e:
+            if isinstance(e, (RepositoryError, DatabaseError)):
+                raise
+            logger.error(f"Error creating tables batch: {str(e)}", exc_info=True)
+            raise RepositoryError(
+                f"Failed to create tables batch: {str(e)}",
+                {"document_id": str(document_id), "table_count": len(tables_data), "error": str(e)},
             ) from e
     
     def _document_from_dict(self, data: Dict[str, Any]) -> Document:

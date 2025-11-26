@@ -12,6 +12,7 @@ from uuid import UUID
 
 from app.services.retrieval.sparse_retriever import SparseRetriever, SparseRetrieverError
 from app.services.retrieval.dense_retriever import DenseRetriever, DenseRetrieverError
+from app.services.retrieval.table_retriever import TableRetriever, TableRetrieverError
 from app.utils.exceptions import BaseAppException
 from app.utils.logging import get_logger
 
@@ -39,6 +40,7 @@ class HybridRetriever:
         self,
         sparse_retriever: Optional[SparseRetriever] = None,
         dense_retriever: Optional[DenseRetriever] = None,
+        table_retriever: Optional[TableRetriever] = None,
         normalize_scores: bool = True,
     ):
         """
@@ -47,13 +49,15 @@ class HybridRetriever:
         Args:
             sparse_retriever: Optional SparseRetriever instance (creates new if not provided)
             dense_retriever: Optional DenseRetriever instance (creates new if not provided)
+            table_retriever: Optional TableRetriever instance (creates new if not provided)
             normalize_scores: Whether to normalize scores before merging (default: True)
         """
         self.sparse_retriever = sparse_retriever or SparseRetriever()
         self.dense_retriever = dense_retriever or DenseRetriever()
+        self.table_retriever = table_retriever or TableRetriever()
         self.normalize_scores = normalize_scores
         
-        logger.debug("hybrid_retriever_initialized")
+        logger.debug("hybrid_retriever_initialized", includes_table_retrieval=True)
     
     async def retrieve(
         self,
@@ -137,9 +141,9 @@ class HybridRetriever:
                 embedding_dim=len(query_embedding),
             )
             
-            # Step 1: Parallel retrieval from both indexes (retrieval timing starts here)
+            # Step 1: Parallel retrieval from all indexes (retrieval timing starts here)
             retrieval_start = time.time()
-            logger.info("hybrid_retrieval_parallel_start", method="async_await")
+            logger.info("hybrid_retrieval_parallel_start", method="async_await", collections=["text_chunks", "table_chunks", "bm25"])
             
             # Define async retrieval functions for parallel execution
             async def retrieve_sparse():
@@ -152,10 +156,15 @@ class HybridRetriever:
                         filter_conditions=filter_conditions,
                     )
                     elapsed = time.time() - start
+                    # Count chunk types
+                    text_count = sum(1 for r in results if r.get("chunk_type", "text") == "text")
+                    table_count = sum(1 for r in results if r.get("chunk_type") == "table")
                     logger.info(
                         "bm25_search_completed",
                         duration_seconds=round(elapsed, 3),
                         results_count=len(results),
+                        text_chunks=text_count,
+                        table_chunks=table_count,
                     )
                     return results, elapsed, None
                 except SparseRetrieverError as e:
@@ -170,7 +179,7 @@ class HybridRetriever:
             async def retrieve_dense():
                 start = time.time()
                 try:
-                    logger.debug("vector_search_start", method="async_parallel")
+                    logger.debug("vector_search_start", collection="text_chunks", method="async_parallel")
                     # Use pre-computed embedding (doesn't include embedding time)
                     results = await self.dense_retriever.retrieve_with_embedding(
                         query_embedding=query_embedding,
@@ -178,57 +187,105 @@ class HybridRetriever:
                         filter_conditions=filter_conditions,
                     )
                     elapsed = time.time() - start
+                    # Count chunk types
+                    text_count = sum(1 for r in results if r.get("chunk_type", "text") == "text")
+                    table_count = sum(1 for r in results if r.get("chunk_type") == "table")
                     logger.info(
                         "vector_search_completed",
+                        collection="text_chunks",
                         duration_seconds=round(elapsed, 3),
                         results_count=len(results),
+                        text_chunks=text_count,
+                        table_chunks=table_count,
                     )
                     return results, elapsed, None
                 except DenseRetrieverError as e:
                     elapsed = time.time() - start
                     logger.warning(
                         "vector_search_failed",
+                        collection="text_chunks",
                         duration_seconds=round(elapsed, 3),
                         error_message=str(e),
                     )
                     return [], elapsed, e
             
-            # Execute both retrievers in parallel using asyncio.gather()
-            logger.debug("parallel_search_execution", method="asyncio_gather")
-            (sparse_results, sparse_time, sparse_error), (dense_results, dense_time, dense_error) = await asyncio.gather(
+            async def retrieve_tables():
+                start = time.time()
+                try:
+                    logger.debug("table_search_start", collection="table_chunks", method="async_parallel")
+                    # Use pre-computed embedding (same as text chunks)
+                    results = await self.table_retriever.retrieve_with_embedding(
+                        query_embedding=query_embedding,
+                        limit=dense_limit,  # Use same limit as dense text search
+                        filter_conditions=filter_conditions,
+                    )
+                    elapsed = time.time() - start
+                    logger.info(
+                        "table_search_completed",
+                        collection="table_chunks",
+                        duration_seconds=round(elapsed, 3),
+                        results_count=len(results),
+                    )
+                    return results, elapsed, None
+                except TableRetrieverError as e:
+                    elapsed = time.time() - start
+                    logger.warning(
+                        "table_search_failed",
+                        collection="table_chunks",
+                        duration_seconds=round(elapsed, 3),
+                        error_message=str(e),
+                    )
+                    return [], elapsed, e
+            
+            # Execute all retrievers in parallel using asyncio.gather()
+            logger.debug("parallel_search_execution", method="asyncio_gather", collections=["text_chunks", "table_chunks", "bm25"])
+            (sparse_results, sparse_time, sparse_error), (dense_results, dense_time, dense_error), (table_results, table_time, table_error) = await asyncio.gather(
                 retrieve_sparse(),
                 retrieve_dense(),
+                retrieve_tables(),
             )
             
             if sparse_error:
-                logger.warning("hybrid_retrieval_partial_failure", fallback="vector_only")
+                logger.warning("hybrid_retrieval_partial_failure", failed="bm25", fallback="vector_and_table")
             if dense_error:
-                logger.warning("hybrid_retrieval_partial_failure", fallback="bm25_only")
+                logger.warning("hybrid_retrieval_partial_failure", failed="text_chunks", fallback="table_and_bm25")
+            if table_error:
+                logger.warning("hybrid_retrieval_partial_failure", failed="table_chunks", fallback="text_and_bm25")
             
             retrieval_elapsed = time.time() - retrieval_start
-            sequential_time = sparse_time + dense_time
+            sequential_time = sparse_time + dense_time + table_time
             parallel_savings = max(0, sequential_time - retrieval_elapsed)
             efficiency = (parallel_savings / sequential_time * 100) if sequential_time > 0 else 0
+            
+            # Count chunk types from all sources
+            all_results = sparse_results + dense_results + table_results
+            text_count = sum(1 for r in all_results if r.get("chunk_type", "text") == "text")
+            table_count = sum(1 for r in all_results if r.get("chunk_type") == "table")
             
             logger.info(
                 "parallel_retrieval_completed",
                 duration_seconds=round(retrieval_elapsed, 3),
                 bm25_duration_seconds=round(sparse_time, 3),
-                vector_duration_seconds=round(dense_time, 3),
+                text_vector_duration_seconds=round(dense_time, 3),
+                table_vector_duration_seconds=round(table_time, 3),
                 sequential_duration_seconds=round(sequential_time, 3),
                 time_saved_seconds=round(parallel_savings, 3),
                 efficiency_percent=round(efficiency, 1),
+                total_chunks_found=len(all_results),
+                text_chunks_found=text_count,
+                table_chunks_found=table_count,
             )
             
-            if not sparse_results and not dense_results:
+            if not sparse_results and not dense_results and not table_results:
                 logger.warning("hybrid_retrieval_no_results")
                 return []
             
-            # Step 2: Merge and deduplicate results
-            logger.debug("hybrid_retrieval_merge_start")
+            # Step 2: Merge and deduplicate results from all sources
+            logger.debug("hybrid_retrieval_merge_start", sources=["bm25", "text_chunks", "table_chunks"])
             merged_results = self._merge_and_deduplicate(
                 sparse_results=sparse_results,
                 dense_results=dense_results,
+                table_results=table_results,
             )
             
             # Step 3: Normalize scores if enabled
@@ -245,15 +302,23 @@ class HybridRetriever:
             merge_time = time.time() - merge_start
             
             total_time = time.time() - total_start
+            
+            # Count final chunk types
+            final_text_count = sum(1 for r in final_results if r.get("chunk_type", "text") == "text")
+            final_table_count = sum(1 for r in final_results if r.get("chunk_type") == "table")
+            
             logger.info(
                 "hybrid_retrieval_complete",
                 results_count=len(final_results),
+                text_chunks=final_text_count,
+                table_chunks=final_table_count,
                 embedding_duration_seconds=round(embedding_time, 3),
                 retrieval_duration_seconds=round(retrieval_elapsed, 3),
                 merge_duration_seconds=round(merge_time, 3),
                 total_duration_seconds=round(total_time, 3),
                 sparse_results_count=len(sparse_results),
-                dense_results_count=len(dense_results),
+                dense_text_results_count=len(dense_results),
+                dense_table_results_count=len(table_results),
             )
             
             return final_results
@@ -274,13 +339,15 @@ class HybridRetriever:
         self,
         sparse_results: List[Dict[str, Any]],
         dense_results: List[Dict[str, Any]],
+        table_results: List[Dict[str, Any]],
     ) -> List[Dict[str, Any]]:
         """
-        Merge results from sparse and dense retrievers, deduplicating by chunk_id.
+        Merge results from sparse, dense text, and table retrievers, deduplicating by chunk_id.
         
         Args:
             sparse_results: Results from BM25 search
-            dense_results: Results from vector search
+            dense_results: Results from text_chunks vector search
+            table_results: Results from table_chunks vector search
         
         Returns:
             List of merged results (one per unique chunk_id)
@@ -299,12 +366,15 @@ class HybridRetriever:
                     "chunk_id": chunk_id,
                     "document_id": result.get("document_id", ""),
                     "chunk_text": result.get("chunk_text", ""),
+                    "table_markdown": result.get("table_markdown"),  # May be present in BM25 results
                     "filename": result.get("filename", ""),
                     "document_type": result.get("document_type", ""),
                     "source_path": result.get("source_path", ""),
+                    "chunk_type": result.get("chunk_type", "text"),
                     "metadata": result.get("metadata", {}),
                     "sparse_score": result.get("score", 0.0),
                     "dense_score": None,  # Will be filled if found in dense results
+                    "table_score": None,  # Will be filled if found in table results
                 }
             else:
                 # Update sparse score if this result has a higher score
@@ -312,8 +382,11 @@ class HybridRetriever:
                 new_score = result.get("score", 0.0)
                 if new_score > existing_score:
                     merged[chunk_id]["sparse_score"] = new_score
+                # Update table_markdown if available
+                if result.get("table_markdown") and not merged[chunk_id].get("table_markdown"):
+                    merged[chunk_id]["table_markdown"] = result.get("table_markdown")
         
-        # Process dense results
+        # Process dense text results
         for result in dense_results:
             chunk_id = result.get("chunk_id")
             if not chunk_id:
@@ -325,12 +398,15 @@ class HybridRetriever:
                     "chunk_id": chunk_id,
                     "document_id": result.get("document_id", ""),
                     "chunk_text": result.get("chunk_text", ""),
+                    "table_markdown": result.get("table_markdown"),  # May be present for table chunks
                     "filename": result.get("filename", ""),
                     "document_type": result.get("document_type", ""),
                     "source_path": result.get("source_path", ""),
+                    "chunk_type": result.get("chunk_type", "text"),
                     "metadata": result.get("metadata", {}),
                     "sparse_score": None,  # Not found in sparse results
                     "dense_score": result.get("score", 0.0),
+                    "table_score": None,  # Not from table collection
                 }
             else:
                 # Existing chunk, update dense score
@@ -338,6 +414,46 @@ class HybridRetriever:
                 new_score = result.get("score", 0.0)
                 if existing_score is None or new_score > existing_score:
                     merged[chunk_id]["dense_score"] = new_score
+                # Update table_markdown if available
+                if result.get("table_markdown") and not merged[chunk_id].get("table_markdown"):
+                    merged[chunk_id]["table_markdown"] = result.get("table_markdown")
+        
+        # Process table results
+        for result in table_results:
+            chunk_id = result.get("chunk_id")
+            if not chunk_id:
+                continue
+            
+            if chunk_id not in merged:
+                # New table chunk, add it
+                merged[chunk_id] = {
+                    "chunk_id": chunk_id,
+                    "document_id": result.get("document_id", ""),
+                    "chunk_text": result.get("chunk_text", ""),  # Flattened text
+                    "table_markdown": result.get("table_markdown", ""),  # Markdown format
+                    "table_data": result.get("table_data", {}),  # JSON format
+                    "filename": result.get("filename", ""),
+                    "document_type": result.get("document_type", ""),
+                    "source_path": result.get("source_path", ""),
+                    "chunk_type": "table",
+                    "metadata": result.get("metadata", {}),
+                    "sparse_score": None,  # May be found in sparse results
+                    "dense_score": None,  # Not from text_chunks collection
+                    "table_score": result.get("score", 0.0),
+                }
+            else:
+                # Existing chunk, update table score
+                existing_score = merged[chunk_id].get("table_score")
+                new_score = result.get("score", 0.0)
+                if existing_score is None or new_score > existing_score:
+                    merged[chunk_id]["table_score"] = new_score
+                # Update table-specific fields if available
+                if result.get("table_markdown") and not merged[chunk_id].get("table_markdown"):
+                    merged[chunk_id]["table_markdown"] = result.get("table_markdown")
+                if result.get("table_data") and not merged[chunk_id].get("table_data"):
+                    merged[chunk_id]["table_data"] = result.get("table_data")
+                # Mark as table chunk
+                merged[chunk_id]["chunk_type"] = "table"
         
         return list(merged.values())
     
@@ -368,6 +484,10 @@ class HybridRetriever:
             r.get("dense_score") for r in results
             if r.get("dense_score") is not None
         ]
+        table_scores = [
+            r.get("table_score") for r in results
+            if r.get("table_score") is not None
+        ]
         
         # Calculate min/max for normalization
         sparse_min = min(sparse_scores) if sparse_scores else 0.0
@@ -377,6 +497,10 @@ class HybridRetriever:
         dense_min = min(dense_scores) if dense_scores else 0.0
         dense_max = max(dense_scores) if dense_scores else 1.0
         dense_range = dense_max - dense_min if dense_max > dense_min else 1.0
+        
+        table_min = min(table_scores) if table_scores else 0.0
+        table_max = max(table_scores) if table_scores else 1.0
+        table_range = table_max - table_min if table_max > table_min else 1.0
         
         # Normalize scores
         for result in results:
@@ -391,6 +515,12 @@ class HybridRetriever:
                 result["dense_score_normalized"] = (dense_score - dense_min) / dense_range
             else:
                 result["dense_score_normalized"] = 0.0
+            
+            table_score = result.get("table_score")
+            if table_score is not None:
+                result["table_score_normalized"] = (table_score - table_min) / table_range
+            else:
+                result["table_score_normalized"] = 0.0
         
         return results
     
@@ -399,14 +529,17 @@ class HybridRetriever:
         results: List[Dict[str, Any]],
     ) -> List[Dict[str, Any]]:
         """
-        Combine sparse and dense scores into a single hybrid score.
+        Combine sparse, dense text, and table scores into a single hybrid score.
         
         Uses weighted average:
-        - If both scores available: (sparse_score * 0.4) + (dense_score * 0.6)
+        - If all three scores available: (sparse * 0.3) + (dense_text * 0.4) + (table * 0.3)
+        - If sparse + dense_text: (sparse * 0.4) + (dense_text * 0.6)
+        - If sparse + table: (sparse * 0.4) + (table * 0.6)
+        - If dense_text + table: (dense_text * 0.5) + (table * 0.5)
         - If only one available: use that score
         
         Args:
-            results: List of results with sparse_score and/or dense_score (normalized if enabled)
+            results: List of results with sparse_score, dense_score, and/or table_score (normalized if enabled)
         
         Returns:
             List of results with combined "score" field
@@ -414,17 +547,30 @@ class HybridRetriever:
         for result in results:
             sparse_score = result.get("sparse_score_normalized") if self.normalize_scores else result.get("sparse_score")
             dense_score = result.get("dense_score_normalized") if self.normalize_scores else result.get("dense_score")
+            table_score = result.get("table_score_normalized") if self.normalize_scores else result.get("table_score")
             
-            if sparse_score is not None and dense_score is not None:
-                # Both scores available: weighted average (40% sparse, 60% dense)
-                # Dense scores typically more reliable for semantic similarity
+            # Combine scores based on what's available
+            if sparse_score is not None and dense_score is not None and table_score is not None:
+                # All three scores: weighted average
+                combined_score = (sparse_score * 0.3) + (dense_score * 0.4) + (table_score * 0.3)
+            elif sparse_score is not None and dense_score is not None:
+                # Sparse + dense text: weighted average (40% sparse, 60% dense)
                 combined_score = (sparse_score * 0.4) + (dense_score * 0.6)
+            elif sparse_score is not None and table_score is not None:
+                # Sparse + table: weighted average (40% sparse, 60% table)
+                combined_score = (sparse_score * 0.4) + (table_score * 0.6)
+            elif dense_score is not None and table_score is not None:
+                # Dense text + table: equal weight
+                combined_score = (dense_score * 0.5) + (table_score * 0.5)
             elif sparse_score is not None:
                 # Only sparse score available
                 combined_score = sparse_score
             elif dense_score is not None:
-                # Only dense score available
+                # Only dense text score available
                 combined_score = dense_score
+            elif table_score is not None:
+                # Only table score available
+                combined_score = table_score
             else:
                 # No scores available (shouldn't happen, but handle gracefully)
                 combined_score = 0.0

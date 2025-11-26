@@ -135,6 +135,39 @@ class VectorRepository:
                 {"collection_name": self.collection_name, "error": str(e)},
             ) from e
     
+    def store_table_vectors(
+        self,
+        chunk_ids: List[UUID],
+        embeddings: List[List[float]],
+        payloads: List[Dict[str, Any]],
+    ) -> bool:
+        """
+        Store table vectors in Qdrant table_chunks collection.
+        
+        Args:
+            chunk_ids: List of chunk UUIDs (used as point IDs)
+            embeddings: List of embedding vectors
+            payloads: List of payload dictionaries (metadata for each vector)
+        
+        Returns:
+            True if successful
+        
+        Raises:
+            VectorRepositoryError: If storage fails
+        """
+        # Use the same logic as store_vectors but with table_chunks collection
+        original_collection = self.collection_name
+        try:
+            # Temporarily switch to table_chunks collection
+            self.collection_name = "table_chunks"
+            self._ensure_collection_exists()
+            
+            # Use the same storage logic
+            return self.store_vectors(chunk_ids, embeddings, payloads)
+        finally:
+            # Restore original collection name
+            self.collection_name = original_collection
+    
     def store_vectors(
         self,
         chunk_ids: List[UUID],
@@ -400,3 +433,34 @@ class VectorRepository:
                 f"Failed to delete vectors by document: {str(e)}",
                 {"document_id": str(document_id), "error": str(e)},
             ) from e
+    
+    def delete_table_vectors_by_document(self, document_id: UUID) -> bool:
+        """
+        Delete all table vectors for a document from table_chunks collection.
+        
+        Args:
+            document_id: Document UUID
+        
+        Returns:
+            True if successful (or if collection doesn't exist)
+        """
+        # Use the same logic as delete_vectors_by_document but with table_chunks collection
+        original_collection = self.collection_name
+        try:
+            # Temporarily switch to table_chunks collection
+            self.collection_name = "table_chunks"
+            
+            # Check if collection exists before trying to delete
+            collections = self.client.get_collections()
+            collection_names = [col.name for col in collections.collections]
+            
+            if self.collection_name not in collection_names:
+                # Collection doesn't exist, nothing to delete
+                logger.debug(f"Table chunks collection '{self.collection_name}' does not exist, nothing to delete")
+                return True
+            
+            # Use the same deletion logic
+            return self.delete_vectors_by_document(document_id)
+        finally:
+            # Restore original collection name
+            self.collection_name = original_collection

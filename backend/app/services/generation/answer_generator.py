@@ -39,6 +39,9 @@ class AnswerGenerator:
 
 Instructions:
 - Answer based ONLY on the provided context
+- Format your answer in Markdown format
+- Use proper Markdown syntax for formatting (headers, lists, code blocks, tables, etc.)
+- When presenting tabular data, use Markdown table format with proper alignment
 - Cite sources using [Document: filename, Chunk: N] format
 - If information is not in the context, say "I don't have that information"
 - Be concise and accurate
@@ -49,7 +52,7 @@ Instructions:
 
 Question: {question}
 
-Please provide an answer based on the context above. If the context doesn't contain the answer, say "I don't have that information"."""
+Please provide an answer based on the context above. Format your answer in Markdown. If the context contains tables, present them using Markdown table syntax. If the context doesn't contain the answer, say "I don't have that information"."""
 
     def __init__(
         self,
@@ -154,11 +157,32 @@ Please provide an answer based on the context above. If the context doesn't cont
             }
         
         try:
+            # Check for potential deduplication issues
+            # Count chunk types
+            text_chunks = [c for c in chunks if c.get("chunk_type", "text") == "text"]
+            table_chunks = [c for c in chunks if c.get("chunk_type") == "table"]
+            
+            logger.debug(
+                "answer_generation_chunk_analysis",
+                total_chunks=len(chunks),
+                text_chunks=len(text_chunks),
+                table_chunks=len(table_chunks),
+            )
+            
             # Format context from chunks
             context_text, chunk_mapping = self._format_context(
                 chunks=chunks,
                 max_length=max_context_length,
             )
+            
+            # Log if we have both text and table chunks (potential deduplication check)
+            if text_chunks and table_chunks:
+                logger.info(
+                    "answer_generation_mixed_chunks",
+                    text_chunks_count=len(text_chunks),
+                    table_chunks_count=len(table_chunks),
+                    message="Both text and table chunks found - deduplication may need verification",
+                )
             
             # Build prompt
             user_prompt = self.DEFAULT_USER_PROMPT_TEMPLATE.format(
@@ -267,9 +291,18 @@ Please provide an answer based on the context above. If the context doesn't cont
             chunk_text = chunk.get("chunk_text", "")
             filename = chunk.get("filename", "Unknown Document")
             metadata = chunk.get("metadata", {})
+            chunk_type = chunk.get("chunk_type", "text")
             
             # Get chunk index from metadata or use sequence number
             chunk_index = metadata.get("chunk_index", idx + 1)
+            
+            # If this is a table chunk, prefer table_markdown if available
+            if chunk_type == "table":
+                # Check if table_markdown is available in payload or metadata
+                table_markdown = chunk.get("table_markdown") or metadata.get("table_markdown")
+                if table_markdown:
+                    chunk_text = table_markdown
+                # Otherwise, use chunk_text (which should be flattened text)
             
             # Format chunk with citation
             citation = f"[Document: {filename}, Chunk: {chunk_index}]"

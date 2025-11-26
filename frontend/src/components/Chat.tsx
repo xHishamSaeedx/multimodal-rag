@@ -1,4 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
+import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
 import { api, QueryResponse, SourceInfo } from '../services/api';
 import './Chat.css';
 
@@ -138,7 +140,15 @@ const Chat: React.FC = () => {
             className={`message ${message.type === 'user' ? 'user-message' : 'assistant-message'}`}
           >
             <div className="message-content">
-              <div className="message-text">{message.content}</div>
+              <div className="message-text">
+                {message.type === 'assistant' ? (
+                  <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                    {message.content}
+                  </ReactMarkdown>
+                ) : (
+                  message.content
+                )}
+              </div>
               
               {message.sources && message.sources.length > 0 && (
                 <div className="message-sources">

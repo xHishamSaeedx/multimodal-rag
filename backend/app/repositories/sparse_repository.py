@@ -79,6 +79,9 @@ class SparseRepository:
         source_paths: List[str],
         metadata_list: List[Dict[str, Any]],
         created_at_list: Optional[List[datetime]] = None,
+        chunk_types: Optional[List[str]] = None,
+        embedding_types: Optional[List[str]] = None,
+        table_markdown_list: Optional[List[str]] = None,
     ) -> bool:
         """
         Index chunks into Elasticsearch for BM25 search.
@@ -118,6 +121,14 @@ class SparseRepository:
                 len(metadata_list),
             ]
             
+            # Add optional lists to validation if provided
+            if chunk_types:
+                lengths.append(len(chunk_types))
+            if embedding_types:
+                lengths.append(len(embedding_types))
+            if table_markdown_list:
+                lengths.append(len(table_markdown_list))
+            
             if not all(length == lengths[0] for length in lengths):
                 raise SparseRepositoryError(
                     "All input lists must have the same length",
@@ -129,6 +140,9 @@ class SparseRepository:
                         "document_types": len(document_types),
                         "source_paths": len(source_paths),
                         "metadata_list": len(metadata_list),
+                        "chunk_types": len(chunk_types) if chunk_types else None,
+                        "embedding_types": len(embedding_types) if embedding_types else None,
+                        "table_markdown_list": len(table_markdown_list) if table_markdown_list else None,
                     },
                 )
             
@@ -146,11 +160,18 @@ class SparseRepository:
                 # Get creation timestamp
                 created_at = created_at_list[i] if created_at_list and i < len(created_at_list) else now
                 
+                # Get chunk_type and embedding_type if provided
+                chunk_type = chunk_types[i] if chunk_types and i < len(chunk_types) else "text"
+                embedding_type = embedding_types[i] if embedding_types and i < len(embedding_types) else "text"
+                table_markdown = table_markdown_list[i] if table_markdown_list and i < len(table_markdown_list) else None
+                
                 # Prepare document for Elasticsearch
                 doc = {
                     "chunk_id": str(chunk_id),
                     "document_id": str(document_id),
                     "chunk_text": chunk_text,
+                    "chunk_type": chunk_type,
+                    "embedding_type": embedding_type,
                     "filename": filename,
                     "document_type": doc_type,
                     "source_path": source_path,
@@ -158,6 +179,10 @@ class SparseRepository:
                     "created_at": created_at.isoformat(),
                     "updated_at": now.isoformat(),
                 }
+                
+                # Add table_markdown if available (for table chunks)
+                if table_markdown:
+                    doc["table_markdown"] = table_markdown
                 
                 # Add bulk action (index operation)
                 action = {
@@ -268,6 +293,9 @@ class SparseRepository:
                     "chunk_id",
                     "document_id",
                     "chunk_text",
+                    "chunk_type",
+                    "embedding_type",
+                    "table_markdown",
                     "filename",
                     "document_type",
                     "source_path",
@@ -320,6 +348,9 @@ class SparseRepository:
                     "document_id": source.get("document_id"),
                     "score": hit.get("_score", 0.0),
                     "chunk_text": source.get("chunk_text", ""),
+                    "chunk_type": source.get("chunk_type", "text"),
+                    "embedding_type": source.get("embedding_type", "text"),
+                    "table_markdown": source.get("table_markdown"),
                     "filename": source.get("filename", ""),
                     "document_type": source.get("document_type", ""),
                     "source_path": source.get("source_path", ""),

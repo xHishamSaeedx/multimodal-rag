@@ -9,9 +9,12 @@ import logging
 from pathlib import Path
 from typing import Optional, Dict, Any
 from uuid import UUID
+from datetime import datetime
 
 from app.services.ingestion.extractor import TextExtractor, ExtractedContent
 from app.services.ingestion.chunker import TextChunker, Chunk, ChunkingError
+from app.services.ingestion.extraction_runner import ExtractionRunner
+from app.services.ingestion.table_processor import TableProcessor, ProcessedTable
 from app.services.embedding.text_embedder import TextEmbedder, EmbeddingError
 from app.services.storage import MinIOStorage
 from app.repositories.document_repository import DocumentRepository, RepositoryError
@@ -56,7 +59,9 @@ class IngestionPipeline:
             chunk_size: Target chunk size in tokens (default: 800)
             chunk_overlap: Overlap size in tokens (default: 150)
         """
-        self.extractor = TextExtractor()
+        self.extractor = TextExtractor()  # Keep for backward compatibility
+        self.extraction_runner = ExtractionRunner(enable_deduplication=True)
+        self.table_processor = TableProcessor()
         self.chunker = TextChunker(
             chunk_size=chunk_size,
             chunk_overlap=chunk_overlap,
@@ -124,15 +129,17 @@ class IngestionPipeline:
             )
             logger.info(f"✓ Stored raw document: {object_key}")
             
-            # Step 2: Extract text
-            logger.info(f"Step 2: Extracting text from: {filename}")
-            extracted_content = self.extractor.extract_from_bytes(
+            # Step 2: Extract text and tables in parallel
+            logger.info(f"Step 2: Extracting text and tables from: {filename}")
+            extracted_content, extracted_tables = self.extraction_runner.extract_parallel_from_bytes(
                 file_bytes=file_bytes,
                 file_name=filename,
+                file_type=file_type,
             )
             logger.info(
                 f"✓ Extracted {len(extracted_content.text)} characters "
-                f"({extracted_content.page_count or 'N/A'} pages)"
+                f"({extracted_content.page_count or 'N/A'} pages), "
+                f"{len(extracted_tables)} table(s)"
             )
             
             # Step 3: Chunk text
@@ -188,27 +195,108 @@ class IngestionPipeline:
             )
             logger.info(f"✓ Created {len(chunk_ids)} chunk records")
             
-            # Step 5: Generate embeddings for chunks
-            logger.info(f"Step 5: Generating embeddings for {len(chunks)} chunks")
+            # Step 4.5: Process and store tables
+            table_chunk_ids = []
+            processed_tables = []
+            if extracted_tables:
+                logger.info(f"Step 4.5: Processing and storing {len(extracted_tables)} table(s)")
+                
+                # Process tables (convert to JSON, markdown, flattened text)
+                processed_tables = [
+                    self.table_processor.process_table(table) for table in extracted_tables
+                ]
+                logger.info(f"✓ Processed {len(processed_tables)} table(s)")
+                
+                # Create table chunks (one chunk per table)
+                table_chunks = []
+                for i, processed_table in enumerate(processed_tables):
+                    table_chunk = Chunk(
+                        text=processed_table.table_text,  # Flattened text for embedding
+                        chunk_index=len(chunks) + i,  # Continue chunk index after text chunks
+                        chunk_type="table",
+                        start_char_index=0,
+                        end_char_index=len(processed_table.table_text),
+                        token_count=Chunk._estimate_token_count(processed_table.table_text),
+                        metadata={
+                            **chunk_metadata,
+                            "table_index": processed_table.table_index,
+                            "page": processed_table.page,
+                            "row_count": processed_table.metadata.get("row_count", 0),
+                            "col_count": processed_table.metadata.get("col_count", 0),
+                            "headers": processed_table.metadata.get("headers", []),
+                        },
+                        created_at=datetime.utcnow(),
+                    )
+                    table_chunks.append(table_chunk)
+                
+                # Store table chunks in database
+                table_chunk_ids = self.repository.create_chunks(
+                    document_id=document_id,
+                    chunks=table_chunks,
+                )
+                logger.info(f"✓ Created {len(table_chunk_ids)} table chunk records")
+                
+                # Update chunks with table_data and embedding_type
+                # Note: We need to update the chunks we just created with table_data
+                # This is a limitation - we should ideally pass table_data during creation
+                # For now, we'll store it in the tables table and link via chunk_id
+                
+                # Store tables in tables table
+                tables_data = []
+                for processed_table, table_chunk_id in zip(processed_tables, table_chunk_ids):
+                    tables_data.append({
+                        "chunk_id": table_chunk_id,
+                        "table_data": processed_table.table_data,
+                        "table_markdown": processed_table.table_markdown,
+                        "table_text": processed_table.table_text,
+                        "metadata": processed_table.metadata,
+                    })
+                
+                table_ids = self.repository.create_tables_batch(
+                    document_id=document_id,
+                    tables_data=tables_data,
+                )
+                logger.info(f"✓ Stored {len(table_ids)} table(s) in tables table")
+            
+            # Step 5: Generate embeddings for text chunks
+            logger.info(f"Step 5: Generating embeddings for {len(chunks)} text chunks")
             
             # Extract chunk texts for embedding
             chunk_texts = [chunk.text for chunk in chunks]
             
             # Generate embeddings in batch
-            embeddings = self.embedder.embed_batch(
+            text_embeddings = self.embedder.embed_batch(
                 texts=chunk_texts,
                 show_progress=True,
             )
             logger.info(
-                f"✓ Generated {len(embeddings)} embeddings "
+                f"✓ Generated {len(text_embeddings)} text embeddings "
                 f"(dimension: {self.embedder.embedding_dim})"
             )
             
-            # Step 6: Store embeddings in Qdrant
-            logger.info(f"Step 6: Storing embeddings in Qdrant")
+            # Step 5.5: Generate embeddings for table chunks
+            table_embeddings = []
+            if processed_tables:
+                logger.info(f"Step 5.5: Generating embeddings for {len(processed_tables)} table chunk(s)")
+                
+                # Extract flattened table texts for embedding
+                table_texts = [processed_table.table_text for processed_table in processed_tables]
+                
+                # Generate embeddings in batch (same model as text)
+                table_embeddings = self.embedder.embed_batch(
+                    texts=table_texts,
+                    show_progress=True,
+                )
+                logger.info(
+                    f"✓ Generated {len(table_embeddings)} table embeddings "
+                    f"(dimension: {self.embedder.embedding_dim})"
+                )
+            
+            # Step 6: Store text embeddings in Qdrant
+            logger.info(f"Step 6: Storing text embeddings in Qdrant")
             
             # Prepare payloads for Qdrant (metadata for each vector)
-            payloads = []
+            text_payloads = []
             for chunk, chunk_id in zip(chunks, chunk_ids):
                 payload = {
                     "chunk_id": str(chunk_id),
@@ -216,24 +304,57 @@ class IngestionPipeline:
                     "text": chunk.text,
                     "chunk_index": chunk.chunk_index,
                     "chunk_type": chunk.chunk_type,
+                    "embedding_type": "text",
                     "filename": filename,
                     "document_type": file_type,
                     "source": source,
                     "source_path": object_key,
                     **chunk.metadata,
                 }
-                payloads.append(payload)
+                text_payloads.append(payload)
             
-            # Store vectors in Qdrant
+            # Store text vectors in Qdrant
             self.vector_repo.store_vectors(
                 chunk_ids=chunk_ids,
-                embeddings=embeddings,
-                payloads=payloads,
+                embeddings=text_embeddings,
+                payloads=text_payloads,
             )
-            logger.info(f"✓ Stored {len(embeddings)} embeddings in Qdrant")
+            logger.info(f"✓ Stored {len(text_embeddings)} text embeddings in Qdrant")
             
-            # Step 7: Index chunks in Elasticsearch (BM25)
-            logger.info(f"Step 7: Indexing chunks in Elasticsearch (BM25)")
+            # Step 6.5: Store table embeddings in Qdrant (table_chunks collection)
+            if processed_tables and table_embeddings:
+                logger.info(f"Step 6.5: Storing table embeddings in Qdrant (table_chunks collection)")
+                
+                # Prepare payloads for table chunks
+                table_payloads = []
+                for processed_table, table_chunk_id in zip(processed_tables, table_chunk_ids):
+                    payload = {
+                        "chunk_id": str(table_chunk_id),
+                        "document_id": str(document_id),
+                        "text": processed_table.table_text,  # Flattened text
+                        "table_data": processed_table.table_data,  # JSON format
+                        "table_markdown": processed_table.table_markdown,  # Markdown format
+                        "chunk_index": len(chunks) + processed_tables.index(processed_table),
+                        "chunk_type": "table",
+                        "embedding_type": "table",
+                        "filename": filename,
+                        "document_type": file_type,
+                        "source": source,
+                        "source_path": object_key,
+                        **processed_table.metadata,
+                    }
+                    table_payloads.append(payload)
+                
+                # Store table vectors in Qdrant table_chunks collection
+                self.vector_repo.store_table_vectors(
+                    chunk_ids=table_chunk_ids,
+                    embeddings=table_embeddings,
+                    payloads=table_payloads,
+                )
+                logger.info(f"✓ Stored {len(table_embeddings)} table embeddings in Qdrant (table_chunks)")
+            
+            # Step 7: Index text chunks in Elasticsearch (BM25)
+            logger.info(f"Step 7: Indexing text chunks in Elasticsearch (BM25)")
             
             # Prepare data for BM25 indexing
             chunk_texts = [chunk.text for chunk in chunks]
@@ -242,7 +363,9 @@ class IngestionPipeline:
             source_paths = [object_key] * len(chunks)
             created_at_list = [chunk.created_at for chunk in chunks]
             
-            # Index chunks in Elasticsearch
+            # Index text chunks in Elasticsearch
+            text_chunk_types = ["text"] * len(chunks)
+            text_embedding_types = ["text"] * len(chunks)
             self.sparse_repo.index_chunks(
                 chunk_ids=chunk_ids,
                 chunk_texts=chunk_texts,
@@ -252,22 +375,73 @@ class IngestionPipeline:
                 source_paths=source_paths,
                 metadata_list=[chunk.metadata for chunk in chunks],
                 created_at_list=created_at_list,
+                chunk_types=text_chunk_types,
+                embedding_types=text_embedding_types,
             )
-            logger.info(f"✓ Indexed {len(chunks)} chunks in Elasticsearch (BM25)")
+            logger.info(f"✓ Indexed {len(chunks)} text chunks in Elasticsearch (BM25)")
             
+            # Step 7.5: Index table chunks in Elasticsearch (BM25)
+            if processed_tables:
+                logger.info(f"Step 7.5: Indexing table chunks in Elasticsearch (BM25)")
+                
+                # Use table_markdown for searchable text (better than flattened text)
+                table_chunk_texts = [processed_table.table_markdown for processed_table in processed_tables]
+                table_filenames = [filename] * len(processed_tables)
+                table_document_types = [file_type] * len(processed_tables)
+                table_source_paths = [object_key] * len(processed_tables)
+                table_created_at_list = [datetime.utcnow()] * len(processed_tables)
+                table_chunk_types = ["table"] * len(processed_tables)
+                table_embedding_types = ["table"] * len(processed_tables)
+                table_markdown_list = [processed_table.table_markdown for processed_table in processed_tables]
+                
+                # Prepare metadata with table-specific fields
+                table_metadata_list = []
+                for processed_table in processed_tables:
+                    table_metadata = {
+                        **chunk_metadata,
+                        "table_index": processed_table.table_index,
+                        "page": processed_table.page,
+                        "row_count": processed_table.metadata.get("row_count", 0),
+                        "col_count": processed_table.metadata.get("col_count", 0),
+                        "headers": processed_table.metadata.get("headers", []),
+                    }
+                    table_metadata_list.append(table_metadata)
+                
+                # Index table chunks in Elasticsearch
+                self.sparse_repo.index_chunks(
+                    chunk_ids=table_chunk_ids,
+                    chunk_texts=table_chunk_texts,
+                    document_ids=[document_id] * len(processed_tables),
+                    filenames=table_filenames,
+                    document_types=table_document_types,
+                    source_paths=table_source_paths,
+                    metadata_list=table_metadata_list,
+                    created_at_list=table_created_at_list,
+                    chunk_types=table_chunk_types,
+                    embedding_types=table_embedding_types,
+                    table_markdown_list=table_markdown_list,
+                )
+                logger.info(f"✓ Indexed {len(processed_tables)} table chunks in Elasticsearch (BM25)")
+            
+            total_chunks = len(chunks) + len(processed_tables)
             logger.info(
                 f"Pipeline complete: Document {document_id} ingested with "
-                f"{len(chunks)} chunks, embeddings stored in Qdrant, "
-                f"and BM25 index in Elasticsearch"
+                f"{len(chunks)} text chunks, {len(processed_tables)} table chunks, "
+                f"embeddings stored in Qdrant, and BM25 index in Elasticsearch"
             )
             
             return {
                 "document_id": str(document_id),
                 "object_key": object_key,
                 "chunks_count": len(chunks),
+                "table_chunks_count": len(processed_tables),
+                "total_chunks_count": total_chunks,
                 "chunk_ids": [str(chunk_id) for chunk_id in chunk_ids],
-                "embeddings_count": len(embeddings),
+                "table_chunk_ids": [str(chunk_id) for chunk_id in table_chunk_ids],
+                "text_embeddings_count": len(text_embeddings),
+                "table_embeddings_count": len(table_embeddings),
                 "extracted_content": extracted_content,
+                "extracted_tables": extracted_tables,
                 "stats": stats,
             }
         
