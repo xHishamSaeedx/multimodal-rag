@@ -15,8 +15,11 @@ from app.services.ingestion.extractor import TextExtractor, ExtractedContent
 from app.services.ingestion.chunker import TextChunker, Chunk, ChunkingError
 from app.services.ingestion.extraction_runner import ExtractionRunner
 from app.services.ingestion.table_processor import TableProcessor, ProcessedTable
+from app.services.ingestion.image_extractor import ExtractedImage
 from app.services.embedding.text_embedder import TextEmbedder, EmbeddingError
+from app.services.embedding.image_embedder import ImageEmbedder
 from app.services.storage import MinIOStorage
+from app.services.storage.supabase_storage import SupabaseImageStorage
 from app.repositories.document_repository import DocumentRepository, RepositoryError
 from app.repositories.vector_repository import VectorRepository, VectorRepositoryError
 from app.repositories.sparse_repository import SparseRepository, SparseRepositoryError
@@ -67,6 +70,7 @@ class IngestionPipeline:
             chunk_overlap=chunk_overlap,
         )
         self.embedder = TextEmbedder()  # Initialize embedding service first
+        self.image_embedder = ImageEmbedder(model_type="siglip")  # Initialize image embedder (SigLIP large, 1024 dim)
         
         # Initialize vector repository with embedding dimension from embedder
         # This ensures Qdrant collection matches the actual model dimensions
@@ -74,10 +78,19 @@ class IngestionPipeline:
             vector_size=self.embedder.embedding_dim,  # Use actual embedding dimension
         )
         
+        # Initialize image vector repository (separate collection for images)
+        # Note: This will need to be updated to support image_chunks collection
+        # For now, we'll use a separate vector repo instance
+        self.image_vector_repo = VectorRepository(
+            vector_size=self.image_embedder.embedding_dim,
+            collection_name="image_chunks",  # Different collection for images
+        )
+        
         # Initialize sparse repository for BM25 indexing
         self.sparse_repo = SparseRepository()
         
         self.storage = MinIOStorage()
+        self.image_storage = SupabaseImageStorage()
         self.repository = DocumentRepository()
         
         logger.info(
@@ -129,9 +142,9 @@ class IngestionPipeline:
             )
             logger.info(f"✓ Stored raw document: {object_key}")
             
-            # Step 2: Extract text and tables in parallel
-            logger.info(f"Step 2: Extracting text and tables from: {filename}")
-            extracted_content, extracted_tables = self.extraction_runner.extract_parallel_from_bytes(
+            # Step 2: Extract text, tables, and images in parallel
+            logger.info(f"Step 2: Extracting text, tables, and images from: {filename}")
+            extracted_content, extracted_tables, extracted_images = self.extraction_runner.extract_parallel_from_bytes(
                 file_bytes=file_bytes,
                 file_name=filename,
                 file_type=file_type,
@@ -139,7 +152,8 @@ class IngestionPipeline:
             logger.info(
                 f"✓ Extracted {len(extracted_content.text)} characters "
                 f"({extracted_content.page_count or 'N/A'} pages), "
-                f"{len(extracted_tables)} table(s)"
+                f"{len(extracted_tables)} table(s), "
+                f"{len(extracted_images)} image(s)"
             )
             
             # Step 3: Chunk text
@@ -353,6 +367,139 @@ class IngestionPipeline:
                 )
                 logger.info(f"✓ Stored {len(table_embeddings)} table embeddings in Qdrant (table_chunks)")
             
+            # Step 6.6: Process and store images
+            image_ids = []
+            image_chunk_ids = []
+            image_storage_paths = []  # Track storage paths for each image
+            processed_extracted_images = []  # Track which images were successfully processed
+            image_embeddings = []  # Initialize to empty list in case no images are extracted
+            if extracted_images:
+                logger.info(f"Step 6.6: Processing {len(extracted_images)} image(s)")
+                
+                # Upload images to Supabase storage and store in database
+                for extracted_image in extracted_images:
+                    try:
+                        # Upload image to Supabase storage
+                        try:
+                            storage_path = self.image_storage.upload_image(
+                                image_bytes=extracted_image.image_bytes,
+                                document_id=document_id,
+                                image_index=extracted_image.image_index,
+                                image_ext=extracted_image.image_ext,
+                                add_timestamp=True,
+                            )
+                        except Exception as e:
+                            logger.warning(f"Failed to upload image {extracted_image.image_index} to Supabase: {e}")
+                            continue
+                        
+                        # Store image record in database
+                        image_id = self.repository.create_image(
+                            document_id=document_id,
+                            image_path=storage_path,
+                            image_type=extracted_image.image_type,
+                            extracted_text=extracted_image.extracted_text,
+                            caption=None,  # Can be added later with captioning
+                            metadata={
+                                "width": extracted_image.width,
+                                "height": extracted_image.height,
+                                "format": extracted_image.image_ext,
+                                "page": extracted_image.page,
+                                "position": extracted_image.position,
+                                **extracted_image.metadata,
+                            },
+                        )
+                        image_ids.append(image_id)
+                        image_storage_paths.append(storage_path)
+                        processed_extracted_images.append(extracted_image)
+                        
+                        # Create a chunk for the image (for consistency with text/table chunks)
+                        # The chunk will reference the image
+                        from uuid import uuid4
+                        image_chunk_id = uuid4()
+                        image_chunk_ids.append(image_chunk_id)
+                        
+                        # Store image chunk in database
+                        self.repository.create_chunk(
+                            document_id=document_id,
+                            chunk_text=extracted_image.extracted_text or f"Image: {extracted_image.image_type}",
+                            chunk_index=len(chunks) + len(processed_tables) + len(image_ids) - 1,
+                            chunk_type="image",
+                            image_path=storage_path,
+                            image_caption=extracted_image.extracted_text,
+                            embedding_type="image",
+                            metadata={
+                                **chunk_metadata,
+                                "image_id": str(image_id),
+                                "image_type": extracted_image.image_type,
+                                "width": extracted_image.width,
+                                "height": extracted_image.height,
+                                "page": extracted_image.page,
+                            },
+                        )
+                        
+                    except Exception as e:
+                        logger.warning(f"Failed to process image {extracted_image.image_index}: {e}")
+                        continue
+                
+                logger.info(f"✓ Processed {len(image_ids)} image(s)")
+                
+                # Step 6.7: Generate image embeddings
+                if image_ids:
+                    logger.info(f"Step 6.7: Generating embeddings for {len(image_ids)} image(s)")
+                    
+                    # Extract image bytes for embedding (only successfully processed ones)
+                    image_bytes_list = [img.image_bytes for img in processed_extracted_images]
+                    
+                    # Generate embeddings in batch
+                    image_embeddings = self.image_embedder.embed_batch(
+                        image_bytes_list=image_bytes_list,
+                        show_progress=True,
+                    )
+                    
+                    logger.info(
+                        f"✓ Generated {len(image_embeddings)} image embeddings "
+                        f"(dimension: {self.image_embedder.embedding_dim})"
+                    )
+                    
+                    # Step 6.8: Store image embeddings in Qdrant (image_chunks collection)
+                    logger.info(f"Step 6.8: Storing image embeddings in Qdrant (image_chunks collection)")
+                    
+                    # Prepare payloads for image chunks
+                    image_payloads = []
+                    for i, (extracted_image, image_id, image_chunk_id, storage_path) in enumerate(
+                        zip(processed_extracted_images, image_ids, image_chunk_ids, image_storage_paths)
+                    ):
+                        payload = {
+                            "chunk_id": str(image_chunk_id),
+                            "document_id": str(document_id),
+                            "image_id": str(image_id),
+                            "image_path": storage_path,  # Storage path in Supabase
+                            "image_type": extracted_image.image_type,
+                            "caption": extracted_image.extracted_text,
+                            "chunk_index": len(chunks) + len(processed_tables) + i,
+                            "chunk_type": "image",
+                            "embedding_type": "image",
+                            "filename": filename,
+                            "document_type": file_type,
+                            "source": source,
+                            "source_path": object_key,
+                            "metadata": {
+                                "width": extracted_image.width,
+                                "height": extracted_image.height,
+                                "format": extracted_image.image_ext,
+                                "page": extracted_image.page,
+                            },
+                        }
+                        image_payloads.append(payload)
+                    
+                    # Store image vectors in Qdrant image_chunks collection
+                    self.image_vector_repo.store_vectors(
+                        chunk_ids=image_chunk_ids,
+                        embeddings=image_embeddings,
+                        payloads=image_payloads,
+                    )
+                    logger.info(f"✓ Stored {len(image_embeddings)} image embeddings in Qdrant (image_chunks)")
+            
             # Step 7: Index text chunks in Elasticsearch (BM25)
             logger.info(f"Step 7: Indexing text chunks in Elasticsearch (BM25)")
             
@@ -423,10 +570,11 @@ class IngestionPipeline:
                 )
                 logger.info(f"✓ Indexed {len(processed_tables)} table chunks in Elasticsearch (BM25)")
             
-            total_chunks = len(chunks) + len(processed_tables)
+            total_chunks = len(chunks) + len(processed_tables) + len(image_ids)
             logger.info(
                 f"Pipeline complete: Document {document_id} ingested with "
                 f"{len(chunks)} text chunks, {len(processed_tables)} table chunks, "
+                f"{len(image_ids)} image chunks, "
                 f"embeddings stored in Qdrant, and BM25 index in Elasticsearch"
             )
             
@@ -435,13 +583,18 @@ class IngestionPipeline:
                 "object_key": object_key,
                 "chunks_count": len(chunks),
                 "table_chunks_count": len(processed_tables),
-                "total_chunks_count": total_chunks,
+                "image_chunks_count": len(image_ids),
+                "total_chunks_count": total_chunks + len(image_ids),
                 "chunk_ids": [str(chunk_id) for chunk_id in chunk_ids],
                 "table_chunk_ids": [str(chunk_id) for chunk_id in table_chunk_ids],
+                "image_chunk_ids": [str(chunk_id) for chunk_id in image_chunk_ids],
+                "image_ids": [str(img_id) for img_id in image_ids],
                 "text_embeddings_count": len(text_embeddings),
                 "table_embeddings_count": len(table_embeddings),
+                "image_embeddings_count": len(image_embeddings),
                 "extracted_content": extracted_content,
                 "extracted_tables": extracted_tables,
+                "extracted_images": extracted_images,
                 "stats": stats,
             }
         

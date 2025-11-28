@@ -47,7 +47,7 @@ CREATE TABLE IF NOT EXISTS images (
     created_at TIMESTAMP WITH TIME ZONE DEFAULT now(),
     document_id UUID NOT NULL REFERENCES documents(id) ON UPDATE CASCADE ON DELETE CASCADE,
     chunk_id UUID REFERENCES chunks(id) ON UPDATE CASCADE ON DELETE SET NULL,
-    image_path TEXT NOT NULL,
+    image_path TEXT NOT NULL,  -- Supabase storage path: {document_id}/image_{timestamp}-{random}.{ext}
     image_type TEXT,  -- diagram, chart, photo, screenshot
     extracted_text TEXT,  -- OCR text if applicable
     caption TEXT,
@@ -197,4 +197,53 @@ CREATE TRIGGER update_documents_updated_at
 -- Service role already bypasses RLS, but adding explicit policy for clarity
 -- CREATE POLICY "Service role bypass" ON documents FOR ALL TO service_role USING (true);
 -- CREATE POLICY "Service role bypass" ON chunks FOR ALL TO service_role USING (true);
+
+-- Create storage bucket for document images
+INSERT INTO storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
+VALUES (
+  'document-images',
+  'document-images',
+  false,
+  10485760, -- 10MB limit for image files
+  ARRAY['image/jpeg', 'image/png', 'image/gif', 'image/webp', 'image/bmp', 'image/tiff', 'image/svg+xml']
+) ON CONFLICT (id) DO NOTHING;
+
+-- Storage policies for document-images bucket
+-- File path structure: {document_id}/image_{timestamp}-{random}.{ext}
+
+-- Policy: Authenticated users can upload images to document folders
+CREATE POLICY "Document Images - Upload" ON storage.objects
+FOR INSERT TO authenticated
+WITH CHECK (
+  bucket_id = 'document-images' AND
+  -- Allow authenticated users to upload images
+  true
+);
+
+-- Policy: Authenticated users can view images from document folders
+CREATE POLICY "Document Images - View" ON storage.objects
+FOR SELECT TO authenticated
+USING (
+  bucket_id = 'document-images' AND
+  -- Allow authenticated users to view images
+  true
+);
+
+-- Policy: Authenticated users can update images in document folders
+CREATE POLICY "Document Images - Update" ON storage.objects
+FOR UPDATE TO authenticated
+USING (
+  bucket_id = 'document-images' AND
+  -- Allow authenticated users to update images
+  true
+);
+
+-- Policy: Authenticated users can delete images from document folders
+CREATE POLICY "Document Images - Delete" ON storage.objects
+FOR DELETE TO authenticated
+USING (
+  bucket_id = 'document-images' AND
+  -- Allow authenticated users to delete images
+  true
+);
 

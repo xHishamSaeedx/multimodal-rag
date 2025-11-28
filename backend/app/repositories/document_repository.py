@@ -494,6 +494,135 @@ class DocumentRepository:
                 {"document_id": str(document_id), "table_count": len(tables_data), "error": str(e)},
             ) from e
     
+    def create_image(
+        self,
+        document_id: UUID,
+        image_path: str,
+        image_type: Optional[str] = None,
+        extracted_text: Optional[str] = None,
+        caption: Optional[str] = None,
+        chunk_id: Optional[UUID] = None,
+        metadata: Optional[Dict[str, Any]] = None,
+    ) -> UUID:
+        """
+        Create an image record in the images table.
+        
+        Args:
+            document_id: Parent document UUID
+            image_path: Supabase storage path to the image
+            image_type: Image type (diagram, chart, photo, screenshot)
+            extracted_text: OCR text if applicable
+            caption: Optional caption for the image
+            chunk_id: Associated chunk UUID (optional)
+            metadata: Additional metadata (dimensions, format, page_number, etc.)
+        
+        Returns:
+            Image UUID
+        """
+        try:
+            image_id = uuid4()
+            now = datetime.utcnow().isoformat()
+            
+            image_record = {
+                "id": str(image_id),
+                "document_id": str(document_id),
+                "chunk_id": str(chunk_id) if chunk_id else None,
+                "image_path": image_path,
+                "image_type": image_type,
+                "extracted_text": extracted_text,
+                "caption": caption,
+                "metadata": metadata or {},
+                "created_at": now,
+            }
+            
+            logger.debug(f"Creating image record: {image_id} for document: {document_id}")
+            
+            result = self.client.table("images").insert(image_record).execute()
+            
+            if not result.data:
+                raise RepositoryError(
+                    "Failed to create image: No data returned",
+                    {"image_id": str(image_id), "document_id": str(document_id)},
+                )
+            
+            logger.info(f"Created image record: {image_id}")
+            return image_id
+        
+        except Exception as e:
+            if isinstance(e, (RepositoryError, DatabaseError)):
+                raise
+            logger.error(f"Error creating image: {str(e)}", exc_info=True)
+            raise RepositoryError(
+                f"Failed to create image: {str(e)}",
+                {"document_id": str(document_id), "error": str(e)},
+            ) from e
+    
+    def create_chunk(
+        self,
+        document_id: UUID,
+        chunk_text: str,
+        chunk_index: int,
+        chunk_type: str = "text",
+        image_path: Optional[str] = None,
+        image_caption: Optional[str] = None,
+        embedding_type: str = "text",
+        metadata: Optional[Dict[str, Any]] = None,
+    ) -> UUID:
+        """
+        Create a single chunk record (supports image chunks).
+        
+        Args:
+            document_id: Parent document UUID
+            chunk_text: Chunk text content
+            chunk_index: Index of chunk within document
+            chunk_type: Type of chunk (text, table, image)
+            image_path: Path to image file (for image chunks)
+            image_caption: Optional caption for images
+            embedding_type: Type of embedding (text, table, image)
+            metadata: Additional metadata
+        
+        Returns:
+            Chunk UUID
+        """
+        try:
+            chunk_id = uuid4()
+            now = datetime.utcnow().isoformat()
+            
+            chunk_data = {
+                "id": str(chunk_id),
+                "document_id": str(document_id),
+                "chunk_text": chunk_text,
+                "chunk_index": chunk_index,
+                "chunk_type": chunk_type,
+                "image_path": image_path,
+                "image_caption": image_caption,
+                "embedding_type": embedding_type,
+                "metadata": metadata or {},
+                "created_at": now,
+            }
+            
+            logger.debug(f"Creating chunk: {chunk_id} for document: {document_id}")
+            
+            result = self.client.table(self.chunks_table).insert(chunk_data).execute()
+            
+            if not result.data:
+                raise RepositoryError(
+                    "Failed to create chunk: No data returned",
+                    {"chunk_id": str(chunk_id), "document_id": str(document_id)},
+                )
+            
+            logger.info(f"Created chunk: {chunk_id}")
+            return chunk_id
+        
+        except Exception as e:
+            if isinstance(e, (RepositoryError, DatabaseError)):
+                raise
+            logger.error(f"Error creating chunk: {str(e)}", exc_info=True)
+            raise RepositoryError(
+                f"Failed to create chunk: {str(e)}",
+                {"document_id": str(document_id), "error": str(e)},
+            ) from e
+    
     def _document_from_dict(self, data: Dict[str, Any]) -> Document:
         """Convert dictionary to Document object."""
         return Document(

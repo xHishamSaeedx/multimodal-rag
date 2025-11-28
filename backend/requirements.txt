@@ -13,6 +13,7 @@ elasticsearch>=8.0.0,<9.0.0  # BM25 sparse index (Elasticsearch 8.x client for 8
 supabase>=2.0.0  # PostgreSQL-based document store
 
 # ML/AI libraries
+numpy<2.0.0  # Pin to NumPy 1.x for compatibility with pandas, matplotlib, numexpr, etc.
 sentence-transformers>=2.2.0  # Embeddings (e5-base-v2, etc.)
 # PyTorch with CUDA 13.0 support (install from PyTorch index)
 --extra-index-url https://download.pytorch.org/whl/cu130
@@ -27,6 +28,11 @@ python-docx>=1.1.0  # DOCX extraction
 # Table extraction libraries (Phase 2)
 camelot-py[cv]>=0.11.0  # PDF table extraction (requires ghostscript, tesseract)
 tabula-py>=2.5.0  # PDF table extraction fallback (requires Java)
+
+# Image processing libraries (Phase 2)
+Pillow>=10.0.0  # Image processing
+easyocr>=1.7.0  # OCR for images (optional)
+timm>=0.9.0  # SigLIP image embeddings (optional, alternative to CLIP)
 
 # Text processing
 langchain==0.3.27  # Text chunking utilities

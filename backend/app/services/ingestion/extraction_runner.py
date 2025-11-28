@@ -13,6 +13,7 @@ from pathlib import Path
 
 from app.services.ingestion.extractor import TextExtractor, ExtractedContent
 from app.services.ingestion.table_extractor import TableExtractor, ExtractedTable
+from app.services.ingestion.image_extractor import ImageExtractor, ExtractedImage
 from app.services.ingestion.table_processor import TableProcessor, ProcessedTable
 from app.services.ingestion.table_deduplicator import TableDeduplicator
 from app.utils.exceptions import ExtractionError
@@ -22,40 +23,50 @@ logger = logging.getLogger(__name__)
 
 class ExtractionRunner:
     """
-    Service for running text and table extraction in parallel.
+    Service for running text, table, and image extraction in parallel.
     
     Features:
-    - Parallel execution of text and table extraction (synchronous and async)
-    - Proper error handling for both extractions
+    - Parallel execution of text, table, and image extraction (synchronous and async)
+    - Proper error handling for all extractions
     - Supports both file paths and bytes
-    - Table extraction failures are non-fatal (continues with text only)
+    - Table and image extraction failures are non-fatal (continues with text only)
     """
     
-    def __init__(self, max_workers: int = 2, enable_deduplication: bool = True):
+    def __init__(
+        self,
+        max_workers: int = 3,  # Increased to 3 for text, table, and image
+        enable_deduplication: bool = True,
+        extract_images: bool = True,
+        extract_ocr: bool = False,
+    ):
         """
         Initialize the extraction runner.
         
         Args:
             max_workers: Maximum number of worker threads for parallel extraction
             enable_deduplication: Whether to remove table text from extracted text
+            extract_images: Whether to extract images (default: True)
+            extract_ocr: Whether to extract OCR text from images (default: False)
         """
         self.text_extractor = TextExtractor()
         self.table_extractor = TableExtractor()
+        self.image_extractor = ImageExtractor(extract_ocr=extract_ocr) if extract_images else None
         self.table_processor = TableProcessor()
         self.table_deduplicator = TableDeduplicator() if enable_deduplication else None
         self.max_workers = max_workers
         self.enable_deduplication = enable_deduplication
+        self.extract_images = extract_images
     
     def extract_parallel_from_bytes(
         self,
         file_bytes: bytes,
         file_name: str,
         file_type: str | None = None,
-    ) -> Tuple[ExtractedContent, list[ExtractedTable]]:
+    ) -> Tuple[ExtractedContent, list[ExtractedTable], list[ExtractedImage]]:
         """
-        Extract text and tables from file bytes in parallel (synchronous).
+        Extract text, tables, and images from file bytes in parallel (synchronous).
         
-        Uses ThreadPoolExecutor to run both extractions concurrently.
+        Uses ThreadPoolExecutor to run all extractions concurrently.
         
         Args:
             file_bytes: File content as bytes
@@ -63,10 +74,10 @@ class ExtractionRunner:
             file_type: Optional file type hint
         
         Returns:
-            Tuple of (ExtractedContent, List[ExtractedTable])
+            Tuple of (ExtractedContent, List[ExtractedTable], List[ExtractedImage])
         
         Raises:
-            ExtractionError: If text extraction fails (table extraction failure is non-fatal)
+            ExtractionError: If text extraction fails (table/image extraction failures are non-fatal)
         """
         try:
             logger.info(f"Starting parallel extraction (sync): {file_name}")
@@ -74,13 +85,16 @@ class ExtractionRunner:
             # Create a copy of file_bytes for each extraction (some libraries may consume it)
             # In practice, most libraries work with BytesIO which doesn't consume the bytes
             with ThreadPoolExecutor(max_workers=self.max_workers) as executor:
-                # Submit both extraction tasks
+                # Submit all extraction tasks
+                futures = {}
+                
                 text_future = executor.submit(
                     self.text_extractor.extract_from_bytes,
                     file_bytes=file_bytes,
                     file_name=file_name,
                     file_type=file_type,
                 )
+                futures[text_future] = "text"
                 
                 table_future = executor.submit(
                     self.table_extractor.extract_from_bytes,
@@ -88,25 +102,40 @@ class ExtractionRunner:
                     file_name=file_name,
                     file_type=file_type,
                 )
+                futures[table_future] = "table"
                 
-                # Wait for both to complete and collect results
+                image_future = None
+                if self.extract_images and self.image_extractor:
+                    image_future = executor.submit(
+                        self.image_extractor.extract_from_bytes,
+                        file_bytes=file_bytes,
+                        file_name=file_name,
+                        file_type=file_type,
+                    )
+                    futures[image_future] = "image"
+                
+                # Wait for all to complete and collect results
                 extracted_content = None
                 extracted_tables = []
+                extracted_images = []
                 
-                for future in as_completed([text_future, table_future]):
+                for future in as_completed(futures.keys()):
                     try:
                         result = future.result()
+                        extraction_type = futures[future]
                         
                         # Determine which extraction this is based on result type
-                        if isinstance(result, ExtractedContent):
+                        if extraction_type == "text":
                             extracted_content = result
-                        elif isinstance(result, list):
-                            # Table extraction returns list
+                        elif extraction_type == "table":
                             extracted_tables = result
+                        elif extraction_type == "image":
+                            extracted_images = result
                     
                     except Exception as e:
                         # Determine which extraction failed
-                        if future == text_future:
+                        extraction_type = futures[future]
+                        if extraction_type == "text":
                             logger.error(
                                 f"Text extraction failed: {e}",
                                 exc_info=e,
@@ -115,13 +144,20 @@ class ExtractionRunner:
                                 f"Text extraction failed: {str(e)}",
                                 {"file_name": file_name, "error": str(e)},
                             ) from e
-                        else:
+                        elif extraction_type == "table":
                             # Table extraction failure is non-fatal
                             logger.warning(
                                 f"Table extraction failed (continuing with text only): {e}",
                                 exc_info=e,
                             )
                             extracted_tables = []
+                        elif extraction_type == "image":
+                            # Image extraction failure is non-fatal
+                            logger.warning(
+                                f"Image extraction failed (continuing without images): {e}",
+                                exc_info=e,
+                            )
+                            extracted_images = []
             
             if extracted_content is None:
                 raise ExtractionError(
@@ -184,13 +220,27 @@ class ExtractionRunner:
                     f"Table deduplication disabled - table content may appear in text chunks"
                 )
             
+            # Log image extraction results
+            if extracted_images:
+                logger.info(
+                    f"✓ Extracted {len(extracted_images)} image(s) from {file_name}"
+                )
+                for i, image in enumerate(extracted_images, 1):
+                    logger.info(
+                        f"  Image {i}: {image.width}×{image.height}px, type: {image.image_type} "
+                        f"(page: {image.page or 'N/A'}, format: {image.image_ext})"
+                    )
+            else:
+                logger.info(f"No images found in {file_name}")
+            
             logger.info(
                 f"Parallel extraction complete: "
                 f"{len(extracted_content.text)} chars, "
-                f"{len(extracted_tables)} table(s)"
+                f"{len(extracted_tables)} table(s), "
+                f"{len(extracted_images)} image(s)"
             )
             
-            return extracted_content, extracted_tables
+            return extracted_content, extracted_tables, extracted_images
         
         except Exception as e:
             if isinstance(e, ExtractionError):
@@ -205,7 +255,7 @@ class ExtractionRunner:
         self,
         file_path: str | Path,
         file_type: str | None = None,
-    ) -> Tuple[ExtractedContent, list[ExtractedTable]]:
+    ) -> Tuple[ExtractedContent, list[ExtractedTable], list[ExtractedImage]]:
         """
         Extract text and tables from file path in parallel (synchronous).
         
@@ -334,13 +384,18 @@ class ExtractionRunner:
                     f"Table deduplication disabled - table content may appear in text chunks"
                 )
             
+            # Note: extract_parallel_from_file doesn't extract images (file-based extraction)
+            # Return empty list for images to maintain consistent return signature
+            extracted_images = []
+            
             logger.info(
                 f"Parallel extraction complete: "
                 f"{len(extracted_content.text)} chars, "
-                f"{len(extracted_tables)} table(s)"
+                f"{len(extracted_tables)} table(s), "
+                f"{len(extracted_images)} image(s)"
             )
             
-            return extracted_content, extracted_tables
+            return extracted_content, extracted_tables, extracted_images
         
         except Exception as e:
             if isinstance(e, ExtractionError):
@@ -356,7 +411,7 @@ class ExtractionRunner:
         file_bytes: bytes,
         file_name: str,
         file_type: str | None = None,
-    ) -> Tuple[ExtractedContent, list[ExtractedTable]]:
+    ) -> Tuple[ExtractedContent, list[ExtractedTable], list[ExtractedImage]]:
         """
         Extract text and tables from file bytes in parallel (asynchronous).
         
@@ -472,13 +527,18 @@ class ExtractionRunner:
                     f"Table deduplication disabled - table content may appear in text chunks"
                 )
             
+            # Note: async method doesn't extract images yet
+            # Return empty list for images to maintain consistent return signature
+            extracted_images = []
+            
             logger.info(
                 f"Parallel extraction complete: "
                 f"{len(extracted_content.text)} chars, "
-                f"{len(extracted_tables)} table(s)"
+                f"{len(extracted_tables)} table(s), "
+                f"{len(extracted_images)} image(s)"
             )
             
-            return extracted_content, extracted_tables
+            return extracted_content, extracted_tables, extracted_images
         
         except Exception as e:
             if isinstance(e, ExtractionError):

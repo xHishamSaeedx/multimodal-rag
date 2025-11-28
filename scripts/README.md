@@ -435,6 +435,72 @@ python scripts/update_elasticsearch_mapping.py --url http://localhost:9200
 - ✅ **Safe to run**: Can be run multiple times (idempotent)
 - ⚠️ **Index must exist**: Run `init_elasticsearch.py` first if the index doesn't exist
 
+### Clean Elasticsearch Index
+
+Clean up partially processed documents or remove specific documents from Elasticsearch:
+
+```bash
+python scripts/clean_elasticsearch.py
+```
+
+**Options**:
+
+- `--url`: Elasticsearch server URL (default: http://localhost:9200)
+- `--index`: Index name (default: chunks)
+- `--stats`: Show index statistics (document count, size, etc.)
+- `--list`: List documents in the index (first 20)
+- `--list-limit N`: Limit for --list option (default: 20)
+- `--delete-all`: Delete all documents (requires confirmation)
+- `--delete-all-yes`: Delete all documents without confirmation (use with caution!)
+- `--delete-by-doc-id <uuid>`: Delete all chunks for a specific document_id
+- `--delete-by-filename <name>`: Delete all chunks for documents with a specific filename
+- `--delete-by-path <path>`: Delete all chunks for documents with a specific source_path
+
+**Examples**:
+
+```bash
+# Show index statistics
+python scripts/clean_elasticsearch.py --stats
+
+# List all documents (first 20)
+python scripts/clean_elasticsearch.py --list
+
+# List more documents
+python scripts/clean_elasticsearch.py --list --list-limit 50
+
+# Delete all documents (with confirmation prompt)
+python scripts/clean_elasticsearch.py --delete-all
+
+# Delete all documents without confirmation (use with caution!)
+python scripts/clean_elasticsearch.py --delete-all-yes
+
+# Delete by document_id (UUID)
+python scripts/clean_elasticsearch.py --delete-by-doc-id "123e4567-e89b-12d3-a456-426614174000"
+
+# Delete by filename
+python scripts/clean_elasticsearch.py --delete-by-filename "document.pdf"
+
+# Delete by source_path
+python scripts/clean_elasticsearch.py --delete-by-path "path/to/document.pdf"
+
+# Combine operations: show stats, list documents, then delete
+python scripts/clean_elasticsearch.py --stats --list --delete-by-filename "test.pdf"
+```
+
+**Use Cases**:
+
+- 🧹 **Clean up after failed uploads**: Remove partially processed documents when ingestion stops halfway
+- 🗑️ **Remove test documents**: Delete specific documents by filename or document_id
+- 📊 **Inspect index contents**: Use `--stats` and `--list` to see what's in the index
+- 🔄 **Reset for testing**: Use `--delete-all` to clear the entire index (then re-run `init_elasticsearch.py` if needed)
+
+**Important Notes**:
+
+- ⚠️ **Destructive operations**: Delete operations permanently remove data from Elasticsearch
+- ✅ **Safe to inspect**: `--stats` and `--list` are read-only operations
+- 🔍 **Filter before delete**: Use `--list` first to verify what will be deleted
+- 💾 **No backup**: This script does not create backups. Make sure you want to delete before proceeding.
+
 ### Environment Variables
 
 You can also use environment variables:
