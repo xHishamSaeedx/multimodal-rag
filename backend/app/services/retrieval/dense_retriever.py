@@ -144,6 +144,8 @@ class DenseRetriever:
                     "chunk_index": payload.get("chunk_index"),
                     "chunk_type": payload.get("chunk_type", "text"),
                     "table_markdown": payload.get("table_markdown"),  # For table chunks
+                    "image_path": payload.get("image_path"),  # For image chunks
+                    "caption": payload.get("caption"),  # For image chunks
                 }
                 
                 # Add all other payload fields as metadata
@@ -159,6 +161,8 @@ class DenseRetriever:
                         "chunk_index",
                         "chunk_type",
                         "table_markdown",
+                        "image_path",
+                        "caption",
                     ]:
                         metadata[key] = value
                 

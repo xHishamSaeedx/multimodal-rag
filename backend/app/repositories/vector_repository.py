@@ -464,3 +464,34 @@ class VectorRepository:
         finally:
             # Restore original collection name
             self.collection_name = original_collection
+    
+    def delete_image_vectors_by_document(self, document_id: UUID) -> bool:
+        """
+        Delete all image vectors for a document from image_chunks collection.
+        
+        Args:
+            document_id: Document UUID
+        
+        Returns:
+            True if successful (or if collection doesn't exist)
+        """
+        # Use the same logic as delete_vectors_by_document but with image_chunks collection
+        original_collection = self.collection_name
+        try:
+            # Temporarily switch to image_chunks collection
+            self.collection_name = "image_chunks"
+            
+            # Check if collection exists before trying to delete
+            collections = self.client.get_collections()
+            collection_names = [col.name for col in collections.collections]
+            
+            if self.collection_name not in collection_names:
+                # Collection doesn't exist, nothing to delete
+                logger.debug(f"Image chunks collection '{self.collection_name}' does not exist, nothing to delete")
+                return True
+            
+            # Use the same deletion logic
+            return self.delete_vectors_by_document(document_id)
+        finally:
+            # Restore original collection name
+            self.collection_name = original_collection

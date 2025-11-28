@@ -13,6 +13,7 @@ from uuid import UUID
 from app.services.retrieval.sparse_retriever import SparseRetriever, SparseRetrieverError
 from app.services.retrieval.dense_retriever import DenseRetriever, DenseRetrieverError
 from app.services.retrieval.table_retriever import TableRetriever, TableRetrieverError
+from app.services.retrieval.image_retriever import ImageRetriever, ImageRetrieverError
 from app.utils.exceptions import BaseAppException
 from app.utils.logging import get_logger
 
@@ -41,6 +42,7 @@ class HybridRetriever:
         sparse_retriever: Optional[SparseRetriever] = None,
         dense_retriever: Optional[DenseRetriever] = None,
         table_retriever: Optional[TableRetriever] = None,
+        image_retriever: Optional[ImageRetriever] = None,
         normalize_scores: bool = True,
     ):
         """
@@ -50,14 +52,16 @@ class HybridRetriever:
             sparse_retriever: Optional SparseRetriever instance (creates new if not provided)
             dense_retriever: Optional DenseRetriever instance (creates new if not provided)
             table_retriever: Optional TableRetriever instance (creates new if not provided)
+            image_retriever: Optional ImageRetriever instance (creates new if not provided)
             normalize_scores: Whether to normalize scores before merging (default: True)
         """
         self.sparse_retriever = sparse_retriever or SparseRetriever()
         self.dense_retriever = dense_retriever or DenseRetriever()
         self.table_retriever = table_retriever or TableRetriever()
+        self.image_retriever = image_retriever or ImageRetriever()
         self.normalize_scores = normalize_scores
         
-        logger.debug("hybrid_retriever_initialized", includes_table_retrieval=True)
+        logger.debug("hybrid_retriever_initialized", includes_table_retrieval=True, includes_image_retrieval=True)
     
     async def retrieve(
         self,
@@ -143,7 +147,7 @@ class HybridRetriever:
             
             # Step 1: Parallel retrieval from all indexes (retrieval timing starts here)
             retrieval_start = time.time()
-            logger.info("hybrid_retrieval_parallel_start", method="async_await", collections=["text_chunks", "table_chunks", "bm25"])
+            logger.info("hybrid_retrieval_parallel_start", method="async_await", collections=["text_chunks", "table_chunks", "image_chunks", "bm25"])
             
             # Define async retrieval functions for parallel execution
             async def retrieve_sparse():
@@ -159,12 +163,14 @@ class HybridRetriever:
                     # Count chunk types
                     text_count = sum(1 for r in results if r.get("chunk_type", "text") == "text")
                     table_count = sum(1 for r in results if r.get("chunk_type") == "table")
+                    image_count = sum(1 for r in results if r.get("chunk_type") == "image")
                     logger.info(
                         "bm25_search_completed",
                         duration_seconds=round(elapsed, 3),
                         results_count=len(results),
                         text_chunks=text_count,
                         table_chunks=table_count,
+                        image_chunks=image_count,
                     )
                     return results, elapsed, None
                 except SparseRetrieverError as e:
@@ -190,6 +196,7 @@ class HybridRetriever:
                     # Count chunk types
                     text_count = sum(1 for r in results if r.get("chunk_type", "text") == "text")
                     table_count = sum(1 for r in results if r.get("chunk_type") == "table")
+                    image_count = sum(1 for r in results if r.get("chunk_type") == "image")
                     logger.info(
                         "vector_search_completed",
                         collection="text_chunks",
@@ -197,6 +204,7 @@ class HybridRetriever:
                         results_count=len(results),
                         text_chunks=text_count,
                         table_chunks=table_count,
+                        image_chunks=image_count,
                     )
                     return results, elapsed, None
                 except DenseRetrieverError as e:
@@ -237,30 +245,67 @@ class HybridRetriever:
                     )
                     return [], elapsed, e
             
+            async def retrieve_images():
+                start = time.time()
+                try:
+                    logger.debug("image_search_start", collection="image_chunks", method="async_parallel")
+                    # Generate image query embedding (1024 dimensions, different from text embedding)
+                    image_query_embedding = await asyncio.to_thread(
+                        self.image_retriever.generate_query_embedding,
+                        query
+                    )
+                    # Use image-specific embedding (1024 dim)
+                    results = await self.image_retriever.retrieve_with_embedding(
+                        query_embedding=image_query_embedding,
+                        limit=dense_limit,  # Use same limit as dense text search
+                        filter_conditions=filter_conditions,
+                    )
+                    elapsed = time.time() - start
+                    logger.info(
+                        "image_search_completed",
+                        collection="image_chunks",
+                        duration_seconds=round(elapsed, 3),
+                        results_count=len(results),
+                    )
+                    return results, elapsed, None
+                except ImageRetrieverError as e:
+                    elapsed = time.time() - start
+                    logger.warning(
+                        "image_search_failed",
+                        collection="image_chunks",
+                        duration_seconds=round(elapsed, 3),
+                        error_message=str(e),
+                    )
+                    return [], elapsed, e
+            
             # Execute all retrievers in parallel using asyncio.gather()
-            logger.debug("parallel_search_execution", method="asyncio_gather", collections=["text_chunks", "table_chunks", "bm25"])
-            (sparse_results, sparse_time, sparse_error), (dense_results, dense_time, dense_error), (table_results, table_time, table_error) = await asyncio.gather(
+            logger.debug("parallel_search_execution", method="asyncio_gather", collections=["text_chunks", "table_chunks", "image_chunks", "bm25"])
+            (sparse_results, sparse_time, sparse_error), (dense_results, dense_time, dense_error), (table_results, table_time, table_error), (image_results, image_time, image_error) = await asyncio.gather(
                 retrieve_sparse(),
                 retrieve_dense(),
                 retrieve_tables(),
+                retrieve_images(),
             )
             
             if sparse_error:
-                logger.warning("hybrid_retrieval_partial_failure", failed="bm25", fallback="vector_and_table")
+                logger.warning("hybrid_retrieval_partial_failure", failed="bm25", fallback="vector_and_table_and_image")
             if dense_error:
-                logger.warning("hybrid_retrieval_partial_failure", failed="text_chunks", fallback="table_and_bm25")
+                logger.warning("hybrid_retrieval_partial_failure", failed="text_chunks", fallback="table_and_image_and_bm25")
             if table_error:
-                logger.warning("hybrid_retrieval_partial_failure", failed="table_chunks", fallback="text_and_bm25")
+                logger.warning("hybrid_retrieval_partial_failure", failed="table_chunks", fallback="text_and_image_and_bm25")
+            if image_error:
+                logger.warning("hybrid_retrieval_partial_failure", failed="image_chunks", fallback="text_and_table_and_bm25")
             
             retrieval_elapsed = time.time() - retrieval_start
-            sequential_time = sparse_time + dense_time + table_time
+            sequential_time = sparse_time + dense_time + table_time + image_time
             parallel_savings = max(0, sequential_time - retrieval_elapsed)
             efficiency = (parallel_savings / sequential_time * 100) if sequential_time > 0 else 0
             
             # Count chunk types from all sources
-            all_results = sparse_results + dense_results + table_results
+            all_results = sparse_results + dense_results + table_results + image_results
             text_count = sum(1 for r in all_results if r.get("chunk_type", "text") == "text")
             table_count = sum(1 for r in all_results if r.get("chunk_type") == "table")
+            image_count = sum(1 for r in all_results if r.get("chunk_type") == "image")
             
             logger.info(
                 "parallel_retrieval_completed",
@@ -268,24 +313,27 @@ class HybridRetriever:
                 bm25_duration_seconds=round(sparse_time, 3),
                 text_vector_duration_seconds=round(dense_time, 3),
                 table_vector_duration_seconds=round(table_time, 3),
+                image_vector_duration_seconds=round(image_time, 3),
                 sequential_duration_seconds=round(sequential_time, 3),
                 time_saved_seconds=round(parallel_savings, 3),
                 efficiency_percent=round(efficiency, 1),
                 total_chunks_found=len(all_results),
                 text_chunks_found=text_count,
                 table_chunks_found=table_count,
+                image_chunks_found=image_count,
             )
             
-            if not sparse_results and not dense_results and not table_results:
+            if not sparse_results and not dense_results and not table_results and not image_results:
                 logger.warning("hybrid_retrieval_no_results")
                 return []
             
             # Step 2: Merge and deduplicate results from all sources
-            logger.debug("hybrid_retrieval_merge_start", sources=["bm25", "text_chunks", "table_chunks"])
+            logger.debug("hybrid_retrieval_merge_start", sources=["bm25", "text_chunks", "table_chunks", "image_chunks"])
             merged_results = self._merge_and_deduplicate(
                 sparse_results=sparse_results,
                 dense_results=dense_results,
                 table_results=table_results,
+                image_results=image_results,
             )
             
             # Step 3: Normalize scores if enabled
@@ -306,12 +354,14 @@ class HybridRetriever:
             # Count final chunk types
             final_text_count = sum(1 for r in final_results if r.get("chunk_type", "text") == "text")
             final_table_count = sum(1 for r in final_results if r.get("chunk_type") == "table")
+            final_image_count = sum(1 for r in final_results if r.get("chunk_type") == "image")
             
             logger.info(
                 "hybrid_retrieval_complete",
                 results_count=len(final_results),
                 text_chunks=final_text_count,
                 table_chunks=final_table_count,
+                image_chunks=final_image_count,
                 embedding_duration_seconds=round(embedding_time, 3),
                 retrieval_duration_seconds=round(retrieval_elapsed, 3),
                 merge_duration_seconds=round(merge_time, 3),
@@ -319,6 +369,7 @@ class HybridRetriever:
                 sparse_results_count=len(sparse_results),
                 dense_text_results_count=len(dense_results),
                 dense_table_results_count=len(table_results),
+                dense_image_results_count=len(image_results),
             )
             
             return final_results
@@ -340,14 +391,16 @@ class HybridRetriever:
         sparse_results: List[Dict[str, Any]],
         dense_results: List[Dict[str, Any]],
         table_results: List[Dict[str, Any]],
+        image_results: List[Dict[str, Any]],
     ) -> List[Dict[str, Any]]:
         """
-        Merge results from sparse, dense text, and table retrievers, deduplicating by chunk_id.
+        Merge results from sparse, dense text, table, and image retrievers, deduplicating by chunk_id.
         
         Args:
             sparse_results: Results from BM25 search
             dense_results: Results from text_chunks vector search
             table_results: Results from table_chunks vector search
+            image_results: Results from image_chunks vector search
         
         Returns:
             List of merged results (one per unique chunk_id)
@@ -375,6 +428,7 @@ class HybridRetriever:
                     "sparse_score": result.get("score", 0.0),
                     "dense_score": None,  # Will be filled if found in dense results
                     "table_score": None,  # Will be filled if found in table results
+                    "image_score": None,  # Will be filled if found in image results
                 }
             else:
                 # Update sparse score if this result has a higher score
@@ -440,6 +494,7 @@ class HybridRetriever:
                     "sparse_score": None,  # May be found in sparse results
                     "dense_score": None,  # Not from text_chunks collection
                     "table_score": result.get("score", 0.0),
+                    "image_score": None,  # Not from image collection
                 }
             else:
                 # Existing chunk, update table score
@@ -454,6 +509,47 @@ class HybridRetriever:
                     merged[chunk_id]["table_data"] = result.get("table_data")
                 # Mark as table chunk
                 merged[chunk_id]["chunk_type"] = "table"
+        
+        # Process image results
+        for result in image_results:
+            chunk_id = result.get("chunk_id")
+            if not chunk_id:
+                continue
+            
+            if chunk_id not in merged:
+                # New image chunk, add it
+                merged[chunk_id] = {
+                    "chunk_id": chunk_id,
+                    "document_id": result.get("document_id", ""),
+                    "chunk_text": result.get("chunk_text", ""),  # Image description or caption
+                    "image_path": result.get("image_path", ""),  # Supabase storage path
+                    "caption": result.get("caption", ""),  # Image caption
+                    "image_type": result.get("image_type", "photo"),  # diagram, chart, photo, etc.
+                    "filename": result.get("filename", ""),
+                    "document_type": result.get("document_type", ""),
+                    "source_path": result.get("source_path", ""),
+                    "chunk_type": "image",
+                    "metadata": result.get("metadata", {}),
+                    "sparse_score": None,  # May be found in sparse results
+                    "dense_score": None,  # Not from text_chunks collection
+                    "table_score": None,  # Not from table collection
+                    "image_score": result.get("score", 0.0),
+                }
+            else:
+                # Existing chunk, update image score
+                existing_score = merged[chunk_id].get("image_score")
+                new_score = result.get("score", 0.0)
+                if existing_score is None or new_score > existing_score:
+                    merged[chunk_id]["image_score"] = new_score
+                # Update image-specific fields if available
+                if result.get("image_path") and not merged[chunk_id].get("image_path"):
+                    merged[chunk_id]["image_path"] = result.get("image_path")
+                if result.get("caption") and not merged[chunk_id].get("caption"):
+                    merged[chunk_id]["caption"] = result.get("caption")
+                if result.get("image_type") and not merged[chunk_id].get("image_type"):
+                    merged[chunk_id]["image_type"] = result.get("image_type")
+                # Mark as image chunk
+                merged[chunk_id]["chunk_type"] = "image"
         
         return list(merged.values())
     
@@ -488,6 +584,10 @@ class HybridRetriever:
             r.get("table_score") for r in results
             if r.get("table_score") is not None
         ]
+        image_scores = [
+            r.get("image_score") for r in results
+            if r.get("image_score") is not None
+        ]
         
         # Calculate min/max for normalization
         sparse_min = min(sparse_scores) if sparse_scores else 0.0
@@ -501,6 +601,10 @@ class HybridRetriever:
         table_min = min(table_scores) if table_scores else 0.0
         table_max = max(table_scores) if table_scores else 1.0
         table_range = table_max - table_min if table_max > table_min else 1.0
+        
+        image_min = min(image_scores) if image_scores else 0.0
+        image_max = max(image_scores) if image_scores else 1.0
+        image_range = image_max - image_min if image_max > image_min else 1.0
         
         # Normalize scores
         for result in results:
@@ -521,6 +625,12 @@ class HybridRetriever:
                 result["table_score_normalized"] = (table_score - table_min) / table_range
             else:
                 result["table_score_normalized"] = 0.0
+            
+            image_score = result.get("image_score")
+            if image_score is not None:
+                result["image_score_normalized"] = (image_score - image_min) / image_range
+            else:
+                result["image_score_normalized"] = 0.0
         
         return results
     
@@ -529,17 +639,16 @@ class HybridRetriever:
         results: List[Dict[str, Any]],
     ) -> List[Dict[str, Any]]:
         """
-        Combine sparse, dense text, and table scores into a single hybrid score.
+        Combine sparse, dense text, table, and image scores into a single hybrid score.
         
         Uses weighted average:
-        - If all three scores available: (sparse * 0.3) + (dense_text * 0.4) + (table * 0.3)
-        - If sparse + dense_text: (sparse * 0.4) + (dense_text * 0.6)
-        - If sparse + table: (sparse * 0.4) + (table * 0.6)
-        - If dense_text + table: (dense_text * 0.5) + (table * 0.5)
+        - If all four scores available: (sparse * 0.2) + (dense_text * 0.3) + (table * 0.2) + (image * 0.3)
+        - If three scores available: weighted based on available scores
+        - If two scores available: weighted average
         - If only one available: use that score
         
         Args:
-            results: List of results with sparse_score, dense_score, and/or table_score (normalized if enabled)
+            results: List of results with sparse_score, dense_score, table_score, and/or image_score (normalized if enabled)
         
         Returns:
             List of results with combined "score" field
@@ -548,20 +657,45 @@ class HybridRetriever:
             sparse_score = result.get("sparse_score_normalized") if self.normalize_scores else result.get("sparse_score")
             dense_score = result.get("dense_score_normalized") if self.normalize_scores else result.get("dense_score")
             table_score = result.get("table_score_normalized") if self.normalize_scores else result.get("table_score")
+            image_score = result.get("image_score_normalized") if self.normalize_scores else result.get("image_score")
+            
+            # Count available scores
+            available_scores = [s for s in [sparse_score, dense_score, table_score, image_score] if s is not None]
             
             # Combine scores based on what's available
-            if sparse_score is not None and dense_score is not None and table_score is not None:
-                # All three scores: weighted average
+            if len(available_scores) == 4:
+                # All four scores: weighted average
+                combined_score = (sparse_score * 0.2) + (dense_score * 0.3) + (table_score * 0.2) + (image_score * 0.3)
+            elif sparse_score is not None and dense_score is not None and table_score is not None:
+                # Three scores (sparse + dense + table): weighted average
                 combined_score = (sparse_score * 0.3) + (dense_score * 0.4) + (table_score * 0.3)
+            elif sparse_score is not None and dense_score is not None and image_score is not None:
+                # Three scores (sparse + dense + image): weighted average
+                combined_score = (sparse_score * 0.25) + (dense_score * 0.35) + (image_score * 0.4)
+            elif sparse_score is not None and table_score is not None and image_score is not None:
+                # Three scores (sparse + table + image): weighted average
+                combined_score = (sparse_score * 0.3) + (table_score * 0.3) + (image_score * 0.4)
+            elif dense_score is not None and table_score is not None and image_score is not None:
+                # Three scores (dense + table + image): weighted average
+                combined_score = (dense_score * 0.35) + (table_score * 0.3) + (image_score * 0.35)
             elif sparse_score is not None and dense_score is not None:
                 # Sparse + dense text: weighted average (40% sparse, 60% dense)
                 combined_score = (sparse_score * 0.4) + (dense_score * 0.6)
             elif sparse_score is not None and table_score is not None:
                 # Sparse + table: weighted average (40% sparse, 60% table)
                 combined_score = (sparse_score * 0.4) + (table_score * 0.6)
+            elif sparse_score is not None and image_score is not None:
+                # Sparse + image: weighted average (40% sparse, 60% image)
+                combined_score = (sparse_score * 0.4) + (image_score * 0.6)
             elif dense_score is not None and table_score is not None:
                 # Dense text + table: equal weight
                 combined_score = (dense_score * 0.5) + (table_score * 0.5)
+            elif dense_score is not None and image_score is not None:
+                # Dense text + image: equal weight
+                combined_score = (dense_score * 0.5) + (image_score * 0.5)
+            elif table_score is not None and image_score is not None:
+                # Table + image: equal weight
+                combined_score = (table_score * 0.5) + (image_score * 0.5)
             elif sparse_score is not None:
                 # Only sparse score available
                 combined_score = sparse_score
@@ -571,6 +705,9 @@ class HybridRetriever:
             elif table_score is not None:
                 # Only table score available
                 combined_score = table_score
+            elif image_score is not None:
+                # Only image score available
+                combined_score = image_score
             else:
                 # No scores available (shouldn't happen, but handle gracefully)
                 combined_score = 0.0

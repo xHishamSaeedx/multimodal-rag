@@ -63,14 +63,17 @@ class IngestionPipeline:
             chunk_overlap: Overlap size in tokens (default: 150)
         """
         self.extractor = TextExtractor()  # Keep for backward compatibility
-        self.extraction_runner = ExtractionRunner(enable_deduplication=True)
+        self.extraction_runner = ExtractionRunner(
+            enable_deduplication=True,
+            extract_ocr=True,  # Enable OCR to extract text from chart images
+        )
         self.table_processor = TableProcessor()
         self.chunker = TextChunker(
             chunk_size=chunk_size,
             chunk_overlap=chunk_overlap,
         )
         self.embedder = TextEmbedder()  # Initialize embedding service first
-        self.image_embedder = ImageEmbedder(model_type="siglip")  # Initialize image embedder (SigLIP large, 1024 dim)
+        self.image_embedder = ImageEmbedder(model_type="clip")  # Initialize image embedder (CLIP large, 768 dim)
         
         # Initialize vector repository with embedding dimension from embedder
         # This ensures Qdrant collection matches the actual model dimensions
@@ -418,10 +421,17 @@ class IngestionPipeline:
                         image_chunk_id = uuid4()
                         image_chunk_ids.append(image_chunk_id)
                         
+                        # Generate descriptive text for the image chunk
+                        # This helps the LLM understand what the image contains
+                        image_chunk_text = self._generate_image_chunk_text(
+                            extracted_image=extracted_image,
+                            extracted_content=extracted_content,
+                        )
+                        
                         # Store image chunk in database
                         self.repository.create_chunk(
                             document_id=document_id,
-                            chunk_text=extracted_image.extracted_text or f"Image: {extracted_image.image_type}",
+                            chunk_text=image_chunk_text,
                             chunk_index=len(chunks) + len(processed_tables) + len(image_ids) - 1,
                             chunk_type="image",
                             image_path=storage_path,
@@ -608,3 +618,57 @@ class IngestionPipeline:
             raise IngestionPipelineError(
                 f"Unexpected error in ingestion pipeline: {str(e)}",
             ) from e
+    
+    def _generate_image_chunk_text(
+        self,
+        extracted_image: ExtractedImage,
+        extracted_content: ExtractedContent,
+    ) -> str:
+        """
+        Generate descriptive text for an image chunk.
+        
+        This helps the LLM understand what the image contains, especially for charts/graphs.
+        
+        Args:
+            extracted_image: The extracted image object
+            extracted_content: The extracted text content (for finding surrounding context)
+        
+        Returns:
+            Descriptive text for the image chunk
+        """
+        # Start with OCR text if available
+        if extracted_image.extracted_text:
+            base_text = extracted_image.extracted_text
+        else:
+            # Generate a descriptive base text based on image type
+            image_type = extracted_image.image_type or "photo"
+            if image_type in ["chart", "graph", "diagram"]:
+                base_text = f"Chart or graph showing data visualization"
+            else:
+                base_text = f"Image: {image_type}"
+        
+        # Try to find surrounding text context from the same page
+        # This helps provide context about what the chart shows
+        context_text = ""
+        if extracted_image.page and extracted_content.text:
+            # For PDFs, we can try to extract text around the image's page
+            # This is a simple approach - in a more sophisticated system, we'd track
+            # exact positions and extract nearby text
+            try:
+                # Split text by pages if available (this is a simplified approach)
+                # In practice, you might want to use the page boundaries from the extractor
+                if hasattr(extracted_content, 'page_texts') and extracted_content.page_texts:
+                    page_text = extracted_content.page_texts.get(extracted_image.page, "")
+                    if page_text:
+                        # Take first 200 chars as context (usually contains title/description)
+                        context_snippet = page_text[:200].strip()
+                        if context_snippet:
+                            context_text = f"\n\nContext from page {extracted_image.page}: {context_snippet}"
+            except Exception as e:
+                logger.debug(f"Could not extract page context for image: {e}")
+        
+        # Build final text
+        if context_text:
+            return f"{base_text}{context_text}"
+        else:
+            return base_text

@@ -339,6 +339,21 @@
   color: inherit;
 }
 
+.source-image {
+  margin: 0.5rem 0;
+  border-radius: 6px;
+  overflow: hidden;
+  max-width: 100%;
+}
+
+.source-image-img {
+  max-width: 100%;
+  height: auto;
+  display: block;
+  border-radius: 6px;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
 .source-preview {
   color: inherit;
   opacity: 0.9;

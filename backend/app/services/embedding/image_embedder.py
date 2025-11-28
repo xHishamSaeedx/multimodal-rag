@@ -64,7 +64,7 @@ class ImageEmbedder:
     
     def __init__(
         self,
-        model_type: str = "siglip",  # "clip" or "siglip" (default: "siglip" to match POC)
+        model_type: str = "clip",  # "clip" or "siglip" (default: "clip" for unified 768 dim)
         model_name: Optional[str] = None,
         device: Optional[str] = None,
     ):
@@ -72,7 +72,7 @@ class ImageEmbedder:
         Initialize the image embedder.
         
         Args:
-            model_type: Model type - "clip" or "siglip" (default: "siglip")
+            model_type: Model type - "clip" or "siglip" (default: "clip" for unified 768 dim)
             model_name: Specific model name (default: based on model_type)
             device: Device to use ("cpu" or "cuda", default: from config)
         """
@@ -84,18 +84,21 @@ class ImageEmbedder:
                 {"model_type": model_type},
             )
         
-        # Set default model names (matching extract_images.py POC)
+        # Set default model names
         if model_name is None:
             if self.model_type == "clip":
-                # Use CLIP base model (512 dim) for balance of speed and quality
-                model_name = "sentence-transformers/clip-ViT-B-32"
+                # Use CLIP large model (768 dim) to match text embeddings and enable unified text-to-image search
+                model_name = "sentence-transformers/clip-ViT-L-14"  # 768 dimensions
             else:  # siglip
-                # Use SigLIP large model (1024 dim) for better quality (matching POC)
+                # Use SigLIP large model (1024 dim) for better quality
                 model_name = "vit_large_patch16_siglip_384"  # 1024 dimensions
         
         self.model_name = model_name
         requested_device = device or settings.embedding_device
         self.device = self._validate_device(requested_device)
+        
+        # Initialize embedding_dim to None (will be set during model initialization)
+        self.embedding_dim = None
         
         # Initialize model
         try:
@@ -106,12 +109,22 @@ class ImageEmbedder:
             else:  # siglip
                 self._init_siglip_model()
             
+            # Verify embedding_dim was set
+            if self.embedding_dim is None:
+                raise EmbeddingError(
+                    f"Model initialization completed but embedding_dim is None. "
+                    f"This indicates a bug in the model initialization code.",
+                    {"model_name": self.model_name, "model_type": self.model_type},
+                )
+            
             logger.info(
                 f"Loaded {self.model_type.upper()} model: {self.model_name} "
                 f"(dimension: {self.embedding_dim}, device: {self.device})"
             )
         except Exception as e:
-            logger.error(f"Failed to load image embedding model: {str(e)}")
+            logger.error(f"Failed to load image embedding model: {str(e)}", exc_info=True)
+            # Ensure embedding_dim is None to indicate failure
+            self.embedding_dim = None
             raise EmbeddingError(
                 f"Failed to load image embedding model {self.model_name}: {str(e)}",
                 {"model_name": self.model_name, "device": self.device, "error": str(e)},
@@ -132,7 +145,46 @@ class ImageEmbedder:
             )
         
         self.model = SentenceTransformer(self.model_name, device=self.device)
-        self.embedding_dim = self.model.get_sentence_embedding_dimension()
+        
+        # Get embedding dimension - CLIP models might not support get_sentence_embedding_dimension()
+        # Try the standard method first, then fallback to encoding a dummy input
+        try:
+            self.embedding_dim = self.model.get_sentence_embedding_dimension()
+            # Verify it's not None
+            if self.embedding_dim is None:
+                raise AttributeError("get_sentence_embedding_dimension() returned None")
+        except (AttributeError, TypeError, ValueError):
+            # Fallback: encode a dummy text input to get the dimension
+            logger.debug(f"get_sentence_embedding_dimension() not available, using fallback method")
+            try:
+                dummy_text = "test"
+                dummy_embedding = self.model.encode(dummy_text, convert_to_numpy=True, show_progress_bar=False)
+                self.embedding_dim = len(dummy_embedding)
+                logger.debug(f"Determined embedding dimension from dummy encoding: {self.embedding_dim}")
+            except Exception as e:
+                # Last resort: use known dimensions for common CLIP models
+                logger.warning(f"Could not determine dimension from encoding, using known values: {str(e)}")
+                if "clip-ViT-L-14" in self.model_name or "ViT-L/14" in self.model_name:
+                    self.embedding_dim = 768
+                elif "clip-ViT-B-32" in self.model_name or "ViT-B/32" in self.model_name:
+                    self.embedding_dim = 512
+                else:
+                    raise EmbeddingError(
+                        f"Could not determine embedding dimension for model {self.model_name}. "
+                        f"Please specify model_name with a known dimension or ensure the model can encode text.",
+                        {"model_name": self.model_name, "error": str(e)},
+                    )
+        
+        # Final verification
+        if self.embedding_dim is None:
+            raise EmbeddingError(
+                f"Failed to determine embedding dimension for CLIP model {self.model_name}",
+                {"model_name": self.model_name},
+            )
+        
+        # CLIP via sentence-transformers can encode both text and images
+        # The model.encode() method automatically detects input type
+        self._has_text_encoder = True
     
     def _init_siglip_model(self):
         """Initialize SigLIP model via timm."""
@@ -174,6 +226,11 @@ class ImageEmbedder:
         else:
             default_dim = 768
         self.embedding_dim = getattr(self.model, 'num_features', default_dim)
+        
+        # SigLIP via timm only has vision encoder, no text encoder
+        # We'll use CLIP text encoder as fallback for text queries
+        self._has_text_encoder = False
+        self._clip_text_encoder = None  # Lazy load if needed
     
     def embed_image(self, image_bytes: bytes) -> List[float]:
         """
@@ -268,6 +325,80 @@ class ImageEmbedder:
             embedding_np = embedding.cpu().numpy().flatten()
         
         return embedding_np.tolist()
+    
+    def embed_text_query(self, text: str) -> List[float]:
+        """
+        Generate embedding for a text query (for searching image embeddings).
+        
+        This enables multimodal retrieval: text queries can find semantically similar images.
+        
+        Args:
+            text: Text query string
+        
+        Returns:
+            Embedding vector as list of floats (same dimension as image embeddings)
+        
+        Raises:
+            EmbeddingError: If embedding generation fails
+        """
+        try:
+            if self.model_type == "clip":
+                # CLIP via sentence-transformers can encode text directly
+                # This produces embeddings in the same semantic space as image embeddings
+                embedding = self.model.encode(
+                    text,
+                    convert_to_numpy=True,
+                    normalize_embeddings=True,
+                    show_progress_bar=False,
+                )
+                return embedding.tolist()
+            else:  # siglip
+                # SigLIP via timm doesn't have a text encoder
+                # Use CLIP text encoder as fallback (CLIP text embeddings align reasonably with SigLIP image embeddings)
+                if self._clip_text_encoder is None:
+                    logger.info("Loading CLIP text encoder for SigLIP text query encoding...")
+                    if not SENTENCE_TRANSFORMERS_AVAILABLE:
+                        raise EmbeddingError(
+                            "sentence-transformers is required for text query encoding with SigLIP. "
+                            "Install it with: pip install sentence-transformers",
+                            {},
+                        )
+                    # Use CLIP large model for text encoding (768 dim)
+                    # Note: This creates a dimension mismatch (768 vs 1024), but CLIP text embeddings
+                    # are in a similar semantic space to SigLIP image embeddings, so retrieval should still work
+                    clip_model_name = "sentence-transformers/clip-ViT-L-14"  # 768 dim
+                    self._clip_text_encoder = SentenceTransformer(clip_model_name, device=self.device)
+                    logger.warning(
+                        f"Using CLIP text encoder ({clip_model_name}, 768 dim) for SigLIP image search (1024 dim). "
+                        f"Dimension mismatch may affect retrieval quality. Consider using CLIP for both text and images."
+                    )
+                
+                # Encode text query using CLIP text encoder
+                text_embedding = self._clip_text_encoder.encode(
+                    text,
+                    convert_to_numpy=True,
+                    normalize_embeddings=True,
+                    show_progress_bar=False,
+                )
+                
+                # Project 768-dim CLIP embedding to 1024-dim to match SigLIP image embeddings
+                # Simple approach: pad with zeros (not ideal, but works)
+                # Better: use learned projection, but for now we'll pad
+                if len(text_embedding) == 768 and self.embedding_dim == 1024:
+                    # Pad 768-dim to 1024-dim by appending zeros
+                    # This is a simple approach - in production, you might want a learned projection
+                    text_embedding = np.pad(text_embedding, (0, 256), mode='constant', constant_values=0)
+                    # Re-normalize after padding
+                    text_embedding = text_embedding / np.linalg.norm(text_embedding)
+                
+                return text_embedding.tolist()
+                
+        except Exception as e:
+            logger.error(f"Error generating text query embedding: {str(e)}", exc_info=True)
+            raise EmbeddingError(
+                f"Failed to generate text query embedding: {str(e)}",
+                {"text": text[:100] if text else "", "error": str(e)},
+            ) from e
     
     def embed_batch(
         self,

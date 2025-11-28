@@ -351,7 +351,8 @@ class TableExtractor:
                 table_data = table.df.values.tolist()
                 
                 # Filter out empty tables
-                if self._is_table_empty(table_data):
+                if TableExtractor._is_table_empty(table_data):
+                    logger.debug(f"Skipping table {i+1} on page {table.page}: empty table")
                     continue
                 
                 # Clean up the data - convert to strings and strip
@@ -365,6 +366,15 @@ class TableExtractor:
                         cleaned_data.append(cleaned_row)
                 
                 if not cleaned_data:
+                    logger.debug(f"Skipping table {i+1} on page {table.page}: no data after cleaning")
+                    continue
+                
+                # Validate that this is actually a table (not a false positive like chart labels)
+                if not self._is_valid_table(cleaned_data):
+                    logger.debug(
+                        f"Skipping table {i+1} on page {table.page}: "
+                        f"does not meet minimum table requirements (likely false positive - chart labels, list, etc.)"
+                    )
                     continue
                 
                 # Extract headers and rows
@@ -425,7 +435,12 @@ class TableExtractor:
                 full_data = [headers] + table_data
                 
                 # Filter out empty tables
-                if self._is_table_empty(full_data):
+                if TableExtractor._is_table_empty(full_data):
+                    continue
+                
+                # Validate that this is actually a table (not a false positive)
+                if not self._is_valid_table(full_data):
+                    logger.debug(f"Skipping tabula table {i+1}: does not meet minimum table requirements")
                     continue
                 
                 # Clean up the data
@@ -488,7 +503,12 @@ class TableExtractor:
                     table_data.append(row_data)
                 
                 # Filter out empty tables
-                if self._is_table_empty(table_data):
+                if TableExtractor._is_table_empty(table_data):
+                    continue
+                
+                # Validate that this is actually a table (not a false positive)
+                if not self._is_valid_table(table_data):
+                    logger.debug(f"Skipping DOCX table {table_idx+1}: does not meet minimum table requirements")
                     continue
                 
                 # Extract headers and rows
@@ -515,7 +535,55 @@ class TableExtractor:
                 {"source": str(source), "error": str(e)},
             ) from e
     
-    @staticmethod
+    def _is_valid_table(self, table_data: List[List[str]], min_rows: int = 3, min_cols: int = 2) -> bool:
+        """
+        Validate if extracted data is actually a real table (not a false positive).
+        
+        Filters out:
+        - Single-column data (lists, not tables)
+        - Too small tables (likely chart labels or structured text)
+        - Empty tables
+        
+        Args:
+            table_data: Table data as list of rows (each row is list of cells)
+            min_rows: Minimum number of rows to be considered a valid table (default: 3)
+            min_cols: Minimum number of columns to be considered a valid table (default: 2)
+        
+        Returns:
+            True if table is valid, False otherwise
+        """
+        if not table_data:
+            return False
+        
+        # Check if empty
+        if TableExtractor._is_table_empty(table_data):
+            return False
+        
+        # Check minimum dimensions
+        num_rows = len(table_data)
+        if num_rows < min_rows:
+            logger.debug(f"Table rejected: too few rows ({num_rows} < {min_rows})")
+            return False
+        
+        # Check column count (use first row as reference)
+        if not table_data[0]:
+            return False
+        
+        num_cols = len(table_data[0])
+        if num_cols < min_cols:
+            logger.debug(f"Table rejected: too few columns ({num_cols} < {min_cols}) - likely a list, not a table")
+            return False
+        
+        # Check if all rows have same number of columns (basic table structure)
+        for i, row in enumerate(table_data):
+            if len(row) != num_cols:
+                # Allow some variation (merged cells, etc.) but log it
+                if abs(len(row) - num_cols) > 1:
+                    logger.debug(f"Table rejected: inconsistent column count (row {i} has {len(row)} cols, expected {num_cols})")
+                    return False
+        
+        return True
+    
     def _is_table_empty(table_data: List[List[str]]) -> bool:
         """
         Check if a table is empty (all cells are empty or whitespace).

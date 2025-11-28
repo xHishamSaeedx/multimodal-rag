@@ -254,9 +254,11 @@ async def delete_document(
     This performs cascade deletion across all storage systems:
     1. Deletes vectors from Qdrant (text chunks)
     1.5. Deletes table vectors from Qdrant (table_chunks collection)
-    2. Deletes chunks from Elasticsearch (BM25 index, includes text and table chunks)
-    3. Deletes document, chunks, and tables from Supabase
-    4. Deletes file from MinIO (data lake)
+    1.6. Deletes image vectors from Qdrant (image_chunks collection)
+    2. Deletes chunks from Elasticsearch (BM25 index, includes text, table, and image chunks)
+    3. Deletes images from Supabase Storage (document-images bucket)
+    4. Deletes document, chunks, tables, and images from Supabase database
+    5. Deletes file from MinIO (data lake)
     
     Args:
         object_key: Object key (path) of the document to delete
@@ -272,6 +274,8 @@ async def delete_document(
         doc_repo = DocumentRepository()
         vector_repo = VectorRepository()
         sparse_repo = SparseRepository()
+        from app.services.storage.supabase_storage import SupabaseImageStorage
+        image_storage = SupabaseImageStorage()
         
         # Check if document exists in MinIO
         document_exists_in_storage = storage.document_exists(object_key)
@@ -318,6 +322,18 @@ async def delete_document(
                 deletion_errors.append(f"Qdrant table_chunks: {str(e)}")
                 logger.error(f"Unexpected error deleting table vectors from Qdrant: {str(e)}", exc_info=True)
             
+            # 1.6. Delete image vectors from Qdrant (image_chunks collection)
+            try:
+                vector_repo.delete_image_vectors_by_document(document.id)
+                deletion_success.append("Qdrant image vectors")
+                logger.info(f"Deleted image vectors from Qdrant for document: {document.id}")
+            except VectorRepositoryError as e:
+                deletion_errors.append(f"Qdrant image_chunks: {e.message}")
+                logger.error(f"Failed to delete image vectors from Qdrant: {e.message}", exc_info=True)
+            except Exception as e:
+                deletion_errors.append(f"Qdrant image_chunks: {str(e)}")
+                logger.error(f"Unexpected error deleting image vectors from Qdrant: {str(e)}", exc_info=True)
+            
             # 2. Delete from Elasticsearch (BM25 index)
             try:
                 sparse_repo.delete_chunks_by_document(document.id)
@@ -330,11 +346,20 @@ async def delete_document(
                 deletion_errors.append(f"Elasticsearch: {str(e)}")
                 logger.error(f"Unexpected error deleting chunks from Elasticsearch: {str(e)}", exc_info=True)
             
-            # 3. Delete from Supabase (document, chunks, and tables)
+            # 3. Delete images from Supabase Storage (document-images bucket)
+            try:
+                image_storage.delete_images_by_document(document.id)
+                deletion_success.append("Supabase Storage images")
+                logger.info(f"Deleted images from Supabase Storage for document: {document.id}")
+            except Exception as e:
+                deletion_errors.append(f"Supabase Storage: {str(e)}")
+                logger.error(f"Failed to delete images from Supabase Storage: {str(e)}", exc_info=True)
+            
+            # 4. Delete from Supabase (document, chunks, tables, and images)
             try:
                 doc_repo.delete_document(document.id)
-                deletion_success.append("Supabase document, chunks, and tables")
-                logger.info(f"Deleted document, chunks, and tables from Supabase: {document.id}")
+                deletion_success.append("Supabase document, chunks, tables, and images")
+                logger.info(f"Deleted document, chunks, tables, and images from Supabase: {document.id}")
             except RepositoryError as e:
                 deletion_errors.append(f"Supabase: {e.message}")
                 logger.error(f"Failed to delete from Supabase: {e.message}", exc_info=True)
@@ -342,7 +367,7 @@ async def delete_document(
                 deletion_errors.append(f"Supabase: {str(e)}")
                 logger.error(f"Unexpected error deleting from Supabase: {str(e)}", exc_info=True)
         
-        # 4. Delete from MinIO (data lake)
+        # 5. Delete from MinIO (data lake)
         if document_exists_in_storage:
             try:
                 storage.delete_document(object_key)

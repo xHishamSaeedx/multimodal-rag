@@ -156,6 +156,19 @@ const Chat: React.FC = () => {
                   {message.sources.map((source, index) => (
                     <div key={source.chunk_id} className="source-item">
                       <span className="source-citation">{source.citation}</span>
+                      {source.image_url && (
+                        <div className="source-image">
+                          <img 
+                            src={source.image_url} 
+                            alt={source.chunk_text || source.citation}
+                            className="source-image-img"
+                            onError={(e) => {
+                              // Hide image if it fails to load
+                              (e.target as HTMLImageElement).style.display = 'none';
+                            }}
+                          />
+                        </div>
+                      )}
                       <div className="source-preview">{source.chunk_text}</div>
                     </div>
                   ))}

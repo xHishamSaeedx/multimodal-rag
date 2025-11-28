@@ -315,7 +315,7 @@ class DocumentRepository:
     
     def delete_document(self, document_id: UUID) -> bool:
         """
-        Delete a document and its chunks and tables.
+        Delete a document and its chunks, tables, and images.
         
         Note: This should cascade delete chunks if foreign key constraints are set up.
         
@@ -329,7 +329,11 @@ class DocumentRepository:
             RepositoryError: If deletion fails
         """
         try:
-            # Delete tables first (associated with document)
+            # Delete images first (associated with document)
+            self.client.table("images").delete().eq("document_id", str(document_id)).execute()
+            logger.debug(f"Deleted images for document: {document_id}")
+            
+            # Delete tables (associated with document)
             self.client.table("tables").delete().eq("document_id", str(document_id)).execute()
             logger.debug(f"Deleted tables for document: {document_id}")
             

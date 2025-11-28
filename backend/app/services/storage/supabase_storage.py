@@ -199,6 +199,76 @@ class SupabaseImageStorage:
                 {"storage_path": storage_path, "error": str(e)},
             ) from e
     
+    def delete_images_by_document(self, document_id: UUID) -> bool:
+        """
+        Delete all images for a document from Supabase storage.
+        
+        This deletes all images in the {document_id}/ directory.
+        
+        Args:
+            document_id: Document UUID
+        
+        Returns:
+            True if successful
+        
+        Raises:
+            StorageError: If deletion fails
+        """
+        try:
+            # List all files in the document's directory
+            folder_path = str(document_id)
+            files_response = self.client.storage.from_(self.BUCKET_NAME).list(folder_path)
+            
+            # Handle different response formats from Supabase
+            if hasattr(files_response, 'data'):
+                files = files_response.data
+            elif isinstance(files_response, list):
+                files = files_response
+            else:
+                files = []
+            
+            if not files:
+                logger.debug(f"No images found for document {document_id}")
+                return True
+            
+            # Extract file paths - handle both dict and object formats
+            image_paths = []
+            for file in files:
+                if isinstance(file, dict):
+                    file_name = file.get('name', '')
+                elif hasattr(file, 'name'):
+                    file_name = file.name
+                else:
+                    continue
+                
+                if file_name:
+                    image_paths.append(f"{folder_path}/{file_name}")
+            
+            if not image_paths:
+                logger.debug(f"No image paths found for document {document_id}")
+                return True
+            
+            # Delete all images
+            result = self.client.storage.from_(self.BUCKET_NAME).remove(image_paths)
+            
+            if hasattr(result, 'error') and result.error:
+                raise StorageError(
+                    f"Failed to delete images from Supabase: {result.error}",
+                    {"document_id": str(document_id), "error": result.error},
+                )
+            
+            logger.info(f"✓ Deleted {len(image_paths)} image(s) from Supabase for document: {document_id}")
+            return True
+            
+        except Exception as e:
+            if isinstance(e, StorageError):
+                raise
+            logger.error(f"Error deleting images from Supabase: {str(e)}", exc_info=True)
+            raise StorageError(
+                f"Failed to delete images from Supabase: {str(e)}",
+                {"document_id": str(document_id), "error": str(e)},
+            ) from e
+    
     def _get_content_type(self, image_ext: str) -> str:
         """Get MIME type for image extension."""
         content_types = {

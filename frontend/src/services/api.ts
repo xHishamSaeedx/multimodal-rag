@@ -60,6 +60,8 @@ export interface SourceInfo {
   full_chunk_text: string;  // Full chunk text
   citation: string;
   metadata?: Record<string, any> | null;
+  image_path?: string | null;  // Supabase storage path for image chunks
+  image_url?: string | null;  // Signed URL for image access (temporary)
 }
 
 export interface QueryRequest {

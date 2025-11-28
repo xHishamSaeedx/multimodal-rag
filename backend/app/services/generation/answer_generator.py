@@ -11,6 +11,7 @@ from uuid import UUID
 
 from groq import Groq
 from app.core.config import settings
+from app.services.storage.supabase_storage import SupabaseImageStorage
 from app.utils.exceptions import BaseAppException
 from app.utils.logging import get_logger
 
@@ -42,6 +43,9 @@ Instructions:
 - Format your answer in Markdown format
 - Use proper Markdown syntax for formatting (headers, lists, code blocks, tables, etc.)
 - When presenting tabular data, use Markdown table format with proper alignment
+- When images are referenced in the context, the image description/caption contains important information - USE IT to answer questions
+- If an image is described as a chart, graph, or diagram, the description may contain data points, values, or trends mentioned in the context
+- Extract and use numerical data, trends, and information from image descriptions when answering questions
 - Cite sources using [Document: filename, Chunk: N] format
 - If information is not in the context, say "I don't have that information"
 - Be concise and accurate
@@ -52,7 +56,16 @@ Instructions:
 
 Question: {question}
 
-Please provide an answer based on the context above. Format your answer in Markdown. If the context contains tables, present them using Markdown table syntax. If the context doesn't contain the answer, say "I don't have that information"."""
+Please provide an answer based on the context above. Format your answer in Markdown. 
+
+IMPORTANT:
+- If the context contains tables, extract and present the data using Markdown table syntax
+- If the context contains images (especially charts, graphs, or diagrams), carefully read the image description/caption - it may contain the data you need to answer the question
+- Image descriptions often contain numerical data, trends, or visual information that answers questions about charts and graphs
+- Extract specific numbers, values, and trends from image descriptions when they are provided
+- Reference images naturally in your answer when they contain relevant information
+
+If the context doesn't contain the answer, say "I don't have that information"."""
 
     def __init__(
         self,
@@ -77,6 +90,7 @@ Please provide an answer based on the context above. Format your answer in Markd
         self.temperature = temperature
         self.max_tokens = max_tokens
         self.system_prompt = system_prompt or self.DEFAULT_SYSTEM_PROMPT
+        self.image_storage = SupabaseImageStorage()  # For generating image URLs
         
         if not self.api_key:
             logger.warning(
@@ -161,12 +175,14 @@ Please provide an answer based on the context above. Format your answer in Markd
             # Count chunk types
             text_chunks = [c for c in chunks if c.get("chunk_type", "text") == "text"]
             table_chunks = [c for c in chunks if c.get("chunk_type") == "table"]
+            image_chunks = [c for c in chunks if c.get("chunk_type") == "image"]
             
             logger.debug(
                 "answer_generation_chunk_analysis",
                 total_chunks=len(chunks),
                 text_chunks=len(text_chunks),
                 table_chunks=len(table_chunks),
+                image_chunks=len(image_chunks),
             )
             
             # Format context from chunks
@@ -304,6 +320,64 @@ Please provide an answer based on the context above. Format your answer in Markd
                     chunk_text = table_markdown
                 # Otherwise, use chunk_text (which should be flattened text)
             
+            # If this is an image chunk, add image reference with URL and enhanced description
+            if chunk_type == "image":
+                image_path = chunk.get("image_path") or metadata.get("image_path")
+                image_type = metadata.get("image_type", "photo")
+                
+                if image_path:
+                    try:
+                        # Generate signed URL for the image (valid for 1 hour)
+                        image_url = self.image_storage.get_image_url(image_path, expires_in=3600)
+                        
+                        # Get caption/description
+                        image_caption = chunk.get("caption") or metadata.get("caption") or chunk_text
+                        
+                        # Enhance description based on image type and filename
+                        enhanced_description = image_caption
+                        if not enhanced_description or enhanced_description in ["Image: photo", "Image", "photo"]:
+                            # Try to infer from filename (e.g., "revenue_growth.png" -> "Revenue growth chart")
+                            filename_hint = ""
+                            if image_path:
+                                # Extract filename from path (e.g., "doc_id/image_1_20251128_182843_d0a0b4b8.png")
+                                path_parts = image_path.split("/")
+                                if len(path_parts) > 1:
+                                    filename = path_parts[-1]
+                                    # Remove common prefixes and extensions
+                                    clean_name = filename.replace("image_", "").replace(".png", "").replace(".jpg", "").replace(".jpeg", "")
+                                    # If it's a chart/graph type, mention it
+                                    if image_type in ["chart", "diagram", "graph"]:
+                                        filename_hint = f" {image_type.capitalize()}"
+                            
+                            enhanced_description = f"Visual {image_type}" + filename_hint
+                        
+                        # Build comprehensive image context
+                        image_context = f"[Image: {enhanced_description}]"
+                        if image_caption and image_caption != enhanced_description and image_caption not in ["Image: photo", "Image", "photo"]:
+                            image_context += f"\nDescription: {image_caption}"
+                        
+                        # Add surrounding text context if available (might contain chart data)
+                        if chunk_text and chunk_text not in ["Image: photo", "Image", enhanced_description, "photo"]:
+                            image_context += f"\nContext: {chunk_text}"
+                        
+                        image_context += f"\nImage URL: {image_url}"
+                        
+                        # Add explicit instruction for charts/graphs
+                        if image_type in ["chart", "diagram", "graph"] or "chart" in enhanced_description.lower() or "graph" in enhanced_description.lower():
+                            image_context += f"\n\nIMPORTANT: This is a {image_type} that likely contains numerical data, trends, or visual information. "
+                            image_context += f"Look at the surrounding text chunks in the context above and below this image - they may describe what the chart shows, "
+                            image_context += f"including specific numbers, years, values, or trends. Use that information to answer questions about the chart."
+                        else:
+                            image_context += f"\n\nNOTE: This image may contain charts, graphs, or data visualizations. "
+                            image_context += f"If this is a chart or graph, look at surrounding text chunks in the context that may describe the data shown in the image."
+                        
+                        chunk_text = image_context
+                    except Exception as e:
+                        logger.warning(f"Failed to generate image URL for {image_path}: {e}")
+                        # Still include the chunk text even if URL generation fails
+                        enhanced_description = chunk.get("caption") or metadata.get("caption") or chunk_text or "Image"
+                        chunk_text = f"[Image: {enhanced_description}]\n{chunk_text if chunk_text and chunk_text not in ['Image: photo', 'Image', 'photo'] else 'Visual content from document'}"
+            
             # Format chunk with citation
             citation = f"[Document: {filename}, Chunk: {chunk_index}]"
             chunk_with_citation = f"{citation}\n{chunk_text}\n"
@@ -411,11 +485,13 @@ Please provide an answer based on the context above. Format your answer in Markd
         chunk_text = chunk.get("chunk_text", "")
         filename = chunk.get("filename", "Unknown Document")
         citation = f"[Document: {filename}, Chunk: {chunk_index}]"
+        chunk_type = chunk.get("chunk_type", "text")
+        metadata = chunk.get("metadata", {})
         
         # Truncate chunk text for source display (first 200 chars)
         chunk_text_preview = chunk_text[:200] + "..." if len(chunk_text) > 200 else chunk_text
         
-        return {
+        source_dict = {
             "chunk_id": str(chunk.get("chunk_id", "")),
             "document_id": str(chunk.get("document_id", "")),
             "filename": filename,
@@ -425,6 +501,36 @@ Please provide an answer based on the context above. Format your answer in Markd
             "citation": citation,
             "metadata": chunk.get("metadata", {}),
         }
+        
+        # Add image-specific fields if this is an image chunk
+        if chunk_type == "image":
+            image_path = chunk.get("image_path") or metadata.get("image_path")
+            if image_path:
+                source_dict["image_path"] = image_path
+                try:
+                    # Generate signed URL for the image (valid for 1 hour)
+                    image_url = self.image_storage.get_image_url(image_path, expires_in=3600)
+                    source_dict["image_url"] = image_url
+                except Exception as e:
+                    logger.warning(f"Failed to generate image URL for source {image_path}: {e}")
+                    source_dict["image_url"] = None
+        
+        return source_dict
+        
+        # Add image-specific fields if this is an image chunk
+        if chunk_type == "image":
+            image_path = chunk.get("image_path") or metadata.get("image_path")
+            if image_path:
+                source_dict["image_path"] = image_path
+                try:
+                    # Generate signed URL for the image (valid for 1 hour)
+                    image_url = self.image_storage.get_image_url(image_path, expires_in=3600)
+                    source_dict["image_url"] = image_url
+                except Exception as e:
+                    logger.warning(f"Failed to generate image URL for source {image_path}: {e}")
+                    source_dict["image_url"] = None
+        
+        return source_dict
     
     def validate_answer_groundedness(
         self,

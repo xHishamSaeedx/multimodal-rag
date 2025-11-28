@@ -80,6 +80,8 @@ class SourceInfo(BaseModel):
     full_chunk_text: str  # Full chunk text
     citation: str
     metadata: Optional[Dict[str, Any]] = None
+    image_path: Optional[str] = None  # Supabase storage path for image chunks
+    image_url: Optional[str] = None  # Signed URL for image access (temporary)
 
 
 class QueryResponse(BaseModel):
