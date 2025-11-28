@@ -32,3 +32,8 @@ class FileReadError(BaseAppException):
 class StorageError(BaseAppException):
     """Raised when storage operations fail."""
     pass
+
+
+class VisionProcessingError(BaseAppException):
+    """Raised when vision processing fails."""
+    pass

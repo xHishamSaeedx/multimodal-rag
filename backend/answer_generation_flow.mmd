@@ -1,0 +1,95 @@
+flowchart TD
+    Start([Raw Query Request]) --> ValidateQuery{Validate Query}
+    ValidateQuery -->|Empty| Error1[Return 400 Error]
+    ValidateQuery -->|Valid| GetRetriever[Get HybridRetriever from app.state]
+    
+    GetRetriever --> RetrieveStart[Start Retrieval]
+    
+    RetrieveStart --> GenTextEmbedding[Generate Query Embedding<br/>TextEmbedder.embed_text<br/>query: prefix for e5-base-v2]
+    GenTextEmbedding --> GenImageEmbedding[Generate Image Query Embedding<br/>ImageEmbedder.embed_text<br/>1024 dimensions]
+    
+    GenImageEmbedding --> ParallelRetrieval[Parallel Retrieval<br/>asyncio.gather]
+    
+    ParallelRetrieval --> BM25Search[BM25 Sparse Search<br/>SparseRetriever.retrieve<br/>Elasticsearch]
+    ParallelRetrieval --> VectorTextSearch[Vector Search Text Chunks<br/>DenseRetriever.retrieve_with_embedding<br/>Qdrant text_chunks collection]
+    ParallelRetrieval --> VectorTableSearch[Vector Search Table Chunks<br/>TableRetriever.retrieve_with_embedding<br/>Qdrant table_chunks collection]
+    ParallelRetrieval --> VectorImageSearch[Vector Search Image Chunks<br/>ImageRetriever.retrieve_with_embedding<br/>Qdrant image_chunks collection]
+    
+    BM25Search --> MergeResults["Merge & Deduplicate Results<br/>by chunk_id"]
+    VectorTextSearch --> MergeResults
+    VectorTableSearch --> MergeResults
+    VectorImageSearch --> MergeResults
+    
+    MergeResults --> NormalizeScores[Normalize Scores<br/>Min-Max normalization<br/>per score type]
+    NormalizeScores --> CombineScores[Combine Scores<br/>Weighted average:<br/>sparse 0.2, dense 0.3,<br/>table 0.2, image 0.3]
+    CombineScores --> SortResults[Sort by Combined Score<br/>Return Top-N chunks]
+    
+    SortResults --> CheckEmpty{Chunks Found?}
+    CheckEmpty -->|No| ReturnEmpty[Return Empty Response<br/>No information message]
+    CheckEmpty -->|Yes| GenAnswer[AnswerGenerator.generate_answer]
+    
+    GenAnswer --> FormatContext[Format Context from Chunks<br/>_format_context]
+    
+    FormatContext --> ProcessChunks[Process Each Chunk]
+    ProcessChunks --> CheckChunkType{Chunk Type?}
+    
+    CheckChunkType -->|text| FormatTextChunk["Format Text Chunk<br/>&#91;Document: filename, Chunk: N&#93;<br/>chunk_text"]
+    CheckChunkType -->|table| FormatTableChunk[Format Table Chunk<br/>Use table_markdown if available<br/>else chunk_text]
+    CheckChunkType -->|image| ProcessImage[Process Image Chunk]
+    
+    ProcessImage --> CheckVisionMode{Vision LLM Mode?}
+    CheckVisionMode -->|Yes| VisionLLMProcess[Download Image from Supabase<br/>VisionProcessor.process_image<br/>with query context]
+    CheckVisionMode -->|No| UseStoredCaption[Use Stored Caption]
+    VisionLLMProcess --> GenerateImageURL[Generate Signed Image URL<br/>SupabaseImageStorage.get_image_url]
+    UseStoredCaption --> GenerateImageURL
+    GenerateImageURL --> FormatImageChunk["Format Image Context<br/>&#91;Image: description&#93;<br/>Image URL<br/>Instructions for charts/graphs"]
+    
+    FormatTextChunk --> BuildContext[Build Context String]
+    FormatTableChunk --> BuildContext
+    FormatImageChunk --> BuildContext
+    
+    BuildContext --> CheckLength{Context Length<br/>&lt; max_length?}
+    CheckLength -->|Yes| AddChunk[Add Chunk to Context]
+    CheckLength -->|No| TruncateContext[Truncate Context]
+    AddChunk --> MoreChunks{More Chunks?}
+    TruncateContext --> MoreChunks
+    MoreChunks -->|Yes| ProcessChunks
+    MoreChunks -->|No| BuildPrompt[Build Prompt]
+    
+    BuildPrompt --> SystemPrompt[System Prompt<br/>Default instructions:<br/>- Answer from context only<br/>- Markdown format<br/>- Cite sources<br/>- Use image descriptions]
+    BuildPrompt --> UserPrompt["User Prompt Template<br/>Context: {context}<br/>Question: {question}"]
+    
+    SystemPrompt --> CallGroqAPI[Call Groq API<br/>client.chat.completions.create]
+    UserPrompt --> CallGroqAPI
+    
+    CallGroqAPI --> GroqRequest[Groq API Request<br/>model: settings.groq_model<br/>messages: system + user<br/>temperature: 0.0<br/>max_tokens: 1000]
+    
+    GroqRequest --> GroqResponse["Groq API Response<br/>response.choices[0].message.content"]
+    
+    GroqResponse --> ExtractAnswer["Extract Raw Answer<br/>response.choices[0].message.content.strip"]
+    
+    ExtractAnswer --> ExtractSources{Include Sources?}
+    ExtractSources -->|Yes| ParseCitations["Parse Citations from Answer<br/>Regex: Document: filename, Chunk: N"]
+    ExtractSources -->|No| SkipSources[Skip Source Extraction]
+    
+    ParseCitations --> FormatSources[Format Source Info<br/>chunk_id, document_id,<br/>filename, chunk_index,<br/>chunk_text, citation]
+    FormatSources --> ExtractTokens[Extract Token Usage<br/>prompt_tokens, completion_tokens,<br/>total_tokens]
+    SkipSources --> ExtractTokens
+    
+    ExtractTokens --> BuildResponse[Build QueryResponse<br/>answer, sources, chunks_used,<br/>model, tokens_used,<br/>retrieval_stats]
+    
+    BuildResponse --> ReturnResponse([Return Response<br/>Raw LLM Output + Metadata])
+    
+    Error1 --> End([End])
+    ReturnEmpty --> End
+    ReturnResponse --> End
+    
+    style Start fill:#e1f5ff
+    style ReturnResponse fill:#c8e6c9
+    style Error1 fill:#ffcdd2
+    style ReturnEmpty fill:#fff9c4
+    style CallGroqAPI fill:#f3e5f5
+    style GroqResponse fill:#f3e5f5
+    style ParallelRetrieval fill:#e8f5e9
+    style MergeResults fill:#fff3e0
+

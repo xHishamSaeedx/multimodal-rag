@@ -12,6 +12,7 @@ from uuid import UUID
 from groq import Groq
 from app.core.config import settings
 from app.services.storage.supabase_storage import SupabaseImageStorage
+from app.services.vision import VisionProcessorFactory
 from app.utils.exceptions import BaseAppException
 from app.utils.logging import get_logger
 
@@ -91,6 +92,19 @@ If the context doesn't contain the answer, say "I don't have that information"."
         self.max_tokens = max_tokens
         self.system_prompt = system_prompt or self.DEFAULT_SYSTEM_PROMPT
         self.image_storage = SupabaseImageStorage()  # For generating image URLs
+        
+        # Initialize vision processor if in vision_llm mode (for query-time processing)
+        try:
+            vision_mode = getattr(settings, "vision_processing_mode", "captioning")
+            if vision_mode == "vision_llm":
+                self.vision_processor = VisionProcessorFactory.create_processor(mode="vision_llm")
+                logger.info("Initialized Vision LLM processor for query-time image understanding")
+            else:
+                self.vision_processor = None
+                logger.debug("Using captioning mode - captions generated during ingestion")
+        except Exception as e:
+            logger.warning(f"Failed to initialize vision processor: {e}. Will use stored captions.")
+            self.vision_processor = None
         
         if not self.api_key:
             logger.warning(
@@ -189,6 +203,7 @@ If the context doesn't contain the answer, say "I don't have that information"."
             context_text, chunk_mapping = self._format_context(
                 chunks=chunks,
                 max_length=max_context_length,
+                question=query,
             )
             
             # Log if we have both text and table chunks (potential deduplication check)
@@ -285,6 +300,7 @@ If the context doesn't contain the answer, say "I don't have that information"."
         self,
         chunks: List[Dict[str, Any]],
         max_length: int = 8000,
+        question: Optional[str] = None,
     ) -> Tuple[str, Dict[str, int]]:
         """
         Format chunks into context text with citations.
@@ -292,6 +308,7 @@ If the context doesn't contain the answer, say "I don't have that information"."
         Args:
             chunks: List of retrieved chunks
             max_length: Maximum context length (characters)
+            question: Optional query/question text (used for Vision LLM processing)
         
         Returns:
             Tuple of (context_text, chunk_mapping) where:
@@ -330,8 +347,28 @@ If the context doesn't contain the answer, say "I don't have that information"."
                         # Generate signed URL for the image (valid for 1 hour)
                         image_url = self.image_storage.get_image_url(image_path, expires_in=3600)
                         
-                        # Get caption/description
+                        # Get caption/description (from stored caption or chunk text)
                         image_caption = chunk.get("caption") or metadata.get("caption") or chunk_text
+                        
+                        # If using Vision LLM mode, process image with query for real-time understanding
+                        if self.vision_processor and self.vision_processor.get_mode() == "vision_llm" and question:
+                            try:
+                                # Download image from Supabase
+                                image_bytes = self.image_storage.download_image(image_path)
+                                
+                                # Process with Vision LLM using the query
+                                vision_result = self.vision_processor.process_image(
+                                    image_bytes=image_bytes,
+                                    query=question,  # Use the actual query for better understanding
+                                    context=chunk_text,  # Include surrounding context
+                                )
+                                
+                                # Use Vision LLM's analysis as the description
+                                image_caption = vision_result.description
+                                logger.debug(f"Vision LLM analysis: {image_caption[:100]}...")
+                            except Exception as e:
+                                logger.warning(f"Failed to process image with Vision LLM: {e}. Using stored caption.")
+                                # Fall back to stored caption
                         
                         # Enhance description based on image type and filename
                         enhanced_description = image_caption

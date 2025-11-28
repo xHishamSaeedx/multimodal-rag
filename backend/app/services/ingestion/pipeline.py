@@ -20,6 +20,7 @@ from app.services.embedding.text_embedder import TextEmbedder, EmbeddingError
 from app.services.embedding.image_embedder import ImageEmbedder
 from app.services.storage import MinIOStorage
 from app.services.storage.supabase_storage import SupabaseImageStorage
+from app.services.vision import VisionProcessorFactory
 from app.repositories.document_repository import DocumentRepository, RepositoryError
 from app.repositories.vector_repository import VectorRepository, VectorRepositoryError
 from app.repositories.sparse_repository import SparseRepository, SparseRepositoryError
@@ -91,6 +92,15 @@ class IngestionPipeline:
         
         # Initialize sparse repository for BM25 indexing
         self.sparse_repo = SparseRepository()
+        
+        # Initialize captioning processor (always generate captions during ingestion)
+        # Vision LLM mode can still be used at query time separately
+        try:
+            self.vision_processor = VisionProcessorFactory.create_processor(mode="captioning")
+            logger.info("Initialized captioning processor for image captioning during ingestion")
+        except Exception as e:
+            logger.warning(f"Failed to initialize captioning processor: {e}. Continuing without captioning.")
+            self.vision_processor = None
         
         self.storage = MinIOStorage()
         self.image_storage = SupabaseImageStorage()
@@ -382,6 +392,25 @@ class IngestionPipeline:
                 # Upload images to Supabase storage and store in database
                 for extracted_image in extracted_images:
                     try:
+                        # Generate caption if vision processor is available (regardless of vision mode)
+                        caption = None
+                        if self.vision_processor:
+                            try:
+                                logger.debug(f"Generating caption for image {extracted_image.image_index}")
+                                vision_result = self.vision_processor.process_image(
+                                    image_bytes=extracted_image.image_bytes
+                                )
+                                caption = vision_result.description
+                                # Combine OCR text (if any) with caption
+                                if extracted_image.extracted_text:
+                                    extracted_image.extracted_text = f"{extracted_image.extracted_text}\n\nCaption: {caption}"
+                                else:
+                                    extracted_image.extracted_text = caption
+                                logger.debug(f"✓ Generated caption for image {extracted_image.image_index}: {caption[:50]}...")
+                            except Exception as e:
+                                logger.warning(f"Failed to generate caption for image {extracted_image.image_index}: {e}")
+                                # Continue without caption (use OCR text if available)
+                        
                         # Upload image to Supabase storage
                         try:
                             storage_path = self.image_storage.upload_image(
@@ -401,7 +430,7 @@ class IngestionPipeline:
                             image_path=storage_path,
                             image_type=extracted_image.image_type,
                             extracted_text=extracted_image.extracted_text,
-                            caption=None,  # Can be added later with captioning
+                            caption=caption,  # Store caption separately
                             metadata={
                                 "width": extracted_image.width,
                                 "height": extracted_image.height,

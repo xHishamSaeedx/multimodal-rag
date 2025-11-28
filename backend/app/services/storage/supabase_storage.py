@@ -126,6 +126,44 @@ class SupabaseImageStorage:
                 {"document_id": str(document_id), "image_index": image_index, "error": str(e)},
             ) from e
     
+    def download_image(self, storage_path: str) -> bytes:
+        """
+        Download image from Supabase storage.
+        
+        Args:
+            storage_path: Storage path of the image (e.g., "doc_id/image_1.png")
+        
+        Returns:
+            Image bytes
+        
+        Raises:
+            StorageError: If download fails
+        """
+        try:
+            response = self.client.storage.from_(self.BUCKET_NAME).download(storage_path)
+            
+            if hasattr(response, 'error') and response.error:
+                raise StorageError(
+                    f"Failed to download image from Supabase: {response.error}",
+                    {"storage_path": storage_path, "error": response.error},
+                )
+            
+            # Supabase download returns bytes
+            if isinstance(response, bytes):
+                return response
+            else:
+                # If it's a response object, read the content
+                return response.content if hasattr(response, 'content') else bytes(response)
+        
+        except Exception as e:
+            if isinstance(e, StorageError):
+                raise
+            logger.error(f"Error downloading image from Supabase: {str(e)}", exc_info=True)
+            raise StorageError(
+                f"Failed to download image from Supabase: {str(e)}",
+                {"storage_path": storage_path, "error": str(e)},
+            ) from e
+    
     def get_image_url(self, storage_path: str, expires_in: int = 3600) -> str:
         """
         Get signed URL for image (temporary access).
