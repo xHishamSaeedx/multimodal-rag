@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useCallback } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { api, QueryResponse, SourceInfo } from '../services/api';
@@ -12,13 +12,23 @@ interface Message {
   timestamp: Date;
 }
 
+interface ImageState {
+  url: string;
+  loading: boolean;
+  error: boolean;
+  expiresAt: number; // Timestamp when URL expires
+}
+
 const Chat: React.FC = () => {
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [expandedImage, setExpandedImage] = useState<{ url: string; alt: string } | null>(null);
+  const [imageStates, setImageStates] = useState<Map<string, ImageState>>(new Map());
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
+  const refreshTimersRef = useRef<Map<string, NodeJS.Timeout>>(new Map());
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -39,6 +49,179 @@ const Chat: React.FC = () => {
       },
     ]);
   }, []);
+
+  // Cleanup timers on unmount
+  useEffect(() => {
+    return () => {
+      refreshTimersRef.current.forEach((timer) => clearTimeout(timer));
+      refreshTimersRef.current.clear();
+    };
+  }, []);
+
+  // Refresh image URL before expiration (refresh at 80% of expiration time)
+  const scheduleImageRefresh = useCallback((imagePath: string, expiresIn: number) => {
+    // Clear existing timer if any
+    const existingTimer = refreshTimersRef.current.get(imagePath);
+    if (existingTimer) {
+      clearTimeout(existingTimer);
+    }
+
+    // Schedule refresh at 80% of expiration time
+    const refreshDelay = (expiresIn * 0.8) * 1000; // Convert to milliseconds
+    
+    const timer = setTimeout(async () => {
+      try {
+        const newUrl = await api.getImageUrl(imagePath, 3600);
+        setImageStates((prev) => {
+          const newMap = new Map(prev);
+          const current = newMap.get(imagePath);
+          if (current) {
+            newMap.set(imagePath, {
+              url: newUrl,
+              loading: false,
+              error: false,
+              expiresAt: Date.now() + 3600000, // 1 hour from now
+            });
+          }
+          return newMap;
+        });
+        // Schedule next refresh
+        scheduleImageRefresh(imagePath, 3600);
+      } catch (err) {
+        console.error('Failed to refresh image URL:', err);
+        setImageStates((prev) => {
+          const newMap = new Map(prev);
+          const current = newMap.get(imagePath);
+          if (current) {
+            newMap.set(imagePath, {
+              ...current,
+              error: true,
+            });
+          }
+          return newMap;
+        });
+      }
+    }, refreshDelay);
+
+    refreshTimersRef.current.set(imagePath, timer);
+  }, []);
+
+  // Initialize image state when sources are added
+  useEffect(() => {
+    messages.forEach((message) => {
+      if (message.sources) {
+        message.sources.forEach((source) => {
+          if (source.image_path && source.image_url) {
+            const imageKey = source.image_path;
+            setImageStates((prev) => {
+              // Only initialize if not already present
+              if (!prev.has(imageKey)) {
+                const expiresAt = Date.now() + 3600000; // Assume 1 hour expiration
+                const newState: ImageState = {
+                  url: source.image_url!,
+                  loading: true,
+                  error: false,
+                  expiresAt,
+                };
+                // Schedule refresh
+                scheduleImageRefresh(imageKey, 3600);
+                return new Map(prev).set(imageKey, newState);
+              }
+              return prev;
+            });
+          }
+        });
+      }
+    });
+  }, [messages, scheduleImageRefresh]);
+
+  const handleImageLoad = (imagePath: string) => {
+    setImageStates((prev) => {
+      const newMap = new Map(prev);
+      const current = newMap.get(imagePath);
+      if (current) {
+        newMap.set(imagePath, {
+          ...current,
+          loading: false,
+          error: false,
+        });
+      }
+      return newMap;
+    });
+  };
+
+  const handleImageError = async (imagePath: string, source: SourceInfo) => {
+    // Try to refresh the URL
+    if (imagePath) {
+      try {
+        const newUrl = await api.getImageUrl(imagePath, 3600);
+        setImageStates((prev) => {
+          const newMap = new Map(prev);
+          newMap.set(imagePath, {
+            url: newUrl,
+            loading: false,
+            error: false,
+            expiresAt: Date.now() + 3600000,
+          });
+          return newMap;
+        });
+        scheduleImageRefresh(imagePath, 3600);
+      } catch (err) {
+        console.error('Failed to refresh image URL on error:', err);
+        setImageStates((prev) => {
+          const newMap = new Map(prev);
+          newMap.set(imagePath, {
+            url: source.image_url || '',
+            loading: false,
+            error: true,
+            expiresAt: Date.now() + 3600000,
+          });
+          return newMap;
+        });
+      }
+    } else {
+      setImageStates((prev) => {
+        const newMap = new Map(prev);
+        if (source.image_path) {
+          newMap.set(source.image_path, {
+            url: source.image_url || '',
+            loading: false,
+            error: true,
+            expiresAt: Date.now() + 3600000,
+          });
+        }
+        return newMap;
+      });
+    }
+  };
+
+  const handleImageClick = (url: string, alt: string) => {
+    setExpandedImage({ url, alt });
+  };
+
+  const closeExpandedImage = () => {
+    setExpandedImage(null);
+  };
+
+  // Handle ESC key to close lightbox
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' && expandedImage) {
+        closeExpandedImage();
+      }
+    };
+
+    if (expandedImage) {
+      window.addEventListener('keydown', handleKeyDown);
+      // Prevent body scroll when lightbox is open
+      document.body.style.overflow = 'hidden';
+    }
+
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+      document.body.style.overflow = '';
+    };
+  }, [expandedImage]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -153,25 +336,60 @@ const Chat: React.FC = () => {
               {message.sources && message.sources.length > 0 && (
                 <div className="message-sources">
                   <div className="sources-header">Sources:</div>
-                  {message.sources.map((source, index) => (
-                    <div key={source.chunk_id} className="source-item">
-                      <span className="source-citation">{source.citation}</span>
-                      {source.image_url && (
-                        <div className="source-image">
-                          <img 
-                            src={source.image_url} 
-                            alt={source.chunk_text || source.citation}
-                            className="source-image-img"
-                            onError={(e) => {
-                              // Hide image if it fails to load
-                              (e.target as HTMLImageElement).style.display = 'none';
-                            }}
-                          />
-                        </div>
-                      )}
-                      <div className="source-preview">{source.chunk_text}</div>
-                    </div>
-                  ))}
+                  {message.sources.map((source, index) => {
+                    const hasImage = source.image_path && source.image_url;
+                    const imageKey = source.image_path || '';
+                    const imageState = imageKey ? imageStates.get(imageKey) : null;
+                    const imageUrl = imageState?.url || source.image_url;
+                    const isLoading = imageState?.loading ?? false;
+                    const hasError = imageState?.error ?? false;
+
+                    return (
+                      <div key={source.chunk_id} className="source-item">
+                        <span className="source-citation">
+                          {source.citation}
+                          {hasImage && (
+                            <span className="source-image-badge" title="Contains image">
+                              🖼️
+                            </span>
+                          )}
+                        </span>
+                        {hasImage && imageUrl && !hasError && (
+                          <div className="source-image">
+                            {isLoading && (
+                              <div className="image-loading">
+                                <div className="image-loading-spinner"></div>
+                                <span>Loading image...</span>
+                              </div>
+                            )}
+                            <img
+                              src={imageUrl}
+                              alt={source.chunk_text || source.citation || 'Source image'}
+                              className="source-image-img"
+                              onClick={() => handleImageClick(imageUrl, source.chunk_text || source.citation)}
+                              onLoad={() => imageKey && handleImageLoad(imageKey)}
+                              onError={() => handleImageError(imageKey, source)}
+                              style={{ display: isLoading ? 'none' : 'block' }}
+                            />
+                          </div>
+                        )}
+                        {hasImage && hasError && (
+                          <div className="image-error">
+                            <span>⚠️ Image failed to load</span>
+                            {imageKey && (
+                              <button
+                                className="image-retry-button"
+                                onClick={() => handleImageError(imageKey, source)}
+                              >
+                                Retry
+                              </button>
+                            )}
+                          </div>
+                        )}
+                        <div className="source-preview">{source.chunk_text}</div>
+                      </div>
+                    );
+                  })}
                 </div>
               )}
               
@@ -201,6 +419,23 @@ const Chat: React.FC = () => {
           <button onClick={() => setError(null)} className="error-close">
             ×
           </button>
+        </div>
+      )}
+
+      {/* Image Lightbox Modal */}
+      {expandedImage && (
+        <div className="image-lightbox-overlay" onClick={closeExpandedImage}>
+          <div className="image-lightbox-content" onClick={(e) => e.stopPropagation()}>
+            <button className="image-lightbox-close" onClick={closeExpandedImage} aria-label="Close">
+              ×
+            </button>
+            <img
+              src={expandedImage.url}
+              alt={expandedImage.alt}
+              className="image-lightbox-img"
+            />
+            <div className="image-lightbox-caption">{expandedImage.alt}</div>
+          </div>
         </div>
       )}
 

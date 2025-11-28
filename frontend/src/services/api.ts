@@ -218,6 +218,26 @@ export const api = {
     );
     return response.data;
   },
+
+  /**
+   * Get a signed URL for an image
+   */
+  getImageUrl: async (
+    imagePath: string,
+    expiresIn: number = 3600
+  ): Promise<string> => {
+    // URL encode the image path
+    const encodedPath = encodeURIComponent(imagePath);
+    const response = await apiClient.get<{
+      success: boolean;
+      image_url: string;
+      expires_in: number;
+      image_path: string;
+    }>(`/api/v1/images/${encodedPath}/url`, {
+      params: { expires_in: expiresIn },
+    });
+    return response.data.image_url;
+  },
 };
 
 export default api;

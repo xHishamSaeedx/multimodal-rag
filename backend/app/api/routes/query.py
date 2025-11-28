@@ -164,6 +164,8 @@ async def query(
                     full_chunk_text=source["full_chunk_text"],
                     citation=source["citation"],
                     metadata=source.get("metadata"),
+                    image_path=source.get("image_path"),
+                    image_url=source.get("image_url"),
                 ))
         
         # Step 4: Build response
