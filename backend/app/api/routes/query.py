@@ -71,6 +71,22 @@ async def query(
             },
         )
     
+    # Ensure at least one retriever is enabled
+    enable_sparse = request.enable_sparse if request.enable_sparse is not None else True
+    enable_dense = request.enable_dense if request.enable_dense is not None else True
+    enable_table = request.enable_table if request.enable_table is not None else True
+    enable_image = request.enable_image if request.enable_image is not None else True
+    
+    if not (enable_sparse or enable_dense or enable_table or enable_image):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail={
+                "success": False,
+                "error": "At least one retriever must be enabled",
+                "details": {},
+            },
+        )
+    
     try:
         logger.info(
             "query_processing_start",
@@ -95,12 +111,20 @@ async def query(
             "retrieval_start",
             limit=request.limit,
             filter_conditions=request.filter_conditions,
+            enable_sparse=request.enable_sparse,
+            enable_dense=request.enable_dense,
+            enable_table=request.enable_table,
+            enable_image=request.enable_image,
         )
         retrieval_start_time = time.time()
         retrieved_chunks = await hybrid_retriever.retrieve(
             query=query_text,
             limit=request.limit,
             filter_conditions=request.filter_conditions,
+            enable_sparse=enable_sparse,
+            enable_dense=enable_dense,
+            enable_table=enable_table,
+            enable_image=enable_image,
         )
         retrieval_end_time = time.time()
         retrieval_duration = retrieval_end_time - retrieval_start_time

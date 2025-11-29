@@ -29,6 +29,12 @@ const Chat: React.FC = () => {
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const refreshTimersRef = useRef<Map<string, NodeJS.Timeout>>(new Map());
+  
+  // Retriever configuration state
+  const [enableSparse, setEnableSparse] = useState(true);
+  const [enableDense, setEnableDense] = useState(true);
+  const [enableTable, setEnableTable] = useState(true);
+  const [enableImage, setEnableImage] = useState(true);
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -227,6 +233,12 @@ const Chat: React.FC = () => {
     e.preventDefault();
     
     if (!input.trim() || isLoading) return;
+    
+    // Ensure at least one retriever is enabled
+    if (!enableSparse && !enableDense && !enableTable && !enableImage) {
+      setError('Please select at least one retriever to use.');
+      return;
+    }
 
     const userMessage: Message = {
       id: Date.now().toString(),
@@ -257,6 +269,10 @@ const Chat: React.FC = () => {
         query: userMessage.content,
         limit: 10,
         include_sources: true,
+        enable_sparse: enableSparse,
+        enable_dense: enableDense,
+        enable_table: enableTable,
+        enable_image: enableImage,
       });
 
       // Update assistant message with actual response
@@ -314,6 +330,67 @@ const Chat: React.FC = () => {
         <p className="chat-subtitle">
           Ask questions about your uploaded documents
         </p>
+      </div>
+
+      <div className="processor-config-wrapper">
+        <div className="processor-config">
+          <div className="processor-header">
+            <h3>Retrievers</h3>
+            <p className="processor-description">
+              Select which retrievers to use for searching your documents
+            </p>
+          </div>
+          <div className="processor-options">
+            <label className={`processor-option ${enableSparse ? 'active' : ''}`}>
+              <div className="processor-checkbox-wrapper">
+                <input
+                  type="checkbox"
+                  checked={enableSparse}
+                  onChange={(e) => setEnableSparse(e.target.checked)}
+                  disabled={isLoading}
+                />
+                <span className="processor-label">BM25</span>
+              </div>
+              <span className="processor-hint">Sparse keyword search (BM25)</span>
+            </label>
+            <label className={`processor-option ${enableDense ? 'active' : ''}`}>
+              <div className="processor-checkbox-wrapper">
+                <input
+                  type="checkbox"
+                  checked={enableDense}
+                  onChange={(e) => setEnableDense(e.target.checked)}
+                  disabled={isLoading}
+                />
+                <span className="processor-label">Text</span>
+              </div>
+              <span className="processor-hint">Dense vector search for text</span>
+            </label>
+            <label className={`processor-option ${enableTable ? 'active' : ''}`}>
+              <div className="processor-checkbox-wrapper">
+                <input
+                  type="checkbox"
+                  checked={enableTable}
+                  onChange={(e) => setEnableTable(e.target.checked)}
+                  disabled={isLoading}
+                />
+                <span className="processor-label">Tables</span>
+              </div>
+              <span className="processor-hint">Dense vector search for tables</span>
+            </label>
+            <label className={`processor-option ${enableImage ? 'active' : ''}`}>
+              <div className="processor-checkbox-wrapper">
+                <input
+                  type="checkbox"
+                  checked={enableImage}
+                  onChange={(e) => setEnableImage(e.target.checked)}
+                  disabled={isLoading}
+                />
+                <span className="processor-label">Images</span>
+              </div>
+              <span className="processor-hint">Dense vector search for images</span>
+            </label>
+          </div>
+        </div>
       </div>
 
       <div className="chat-messages">

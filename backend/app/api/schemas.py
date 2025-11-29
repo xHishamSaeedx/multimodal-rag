@@ -67,6 +67,10 @@ class QueryRequest(BaseModel):
     limit: Optional[int] = 10  # Number of chunks to retrieve
     include_sources: bool = True  # Whether to include source citations
     filter_conditions: Optional[Dict[str, Any]] = None  # Optional filters (document_id, document_type, etc.)
+    enable_sparse: Optional[bool] = True  # Whether to use BM25 sparse retriever
+    enable_dense: Optional[bool] = True  # Whether to use dense text retriever
+    enable_table: Optional[bool] = True  # Whether to use table retriever
+    enable_image: Optional[bool] = True  # Whether to use image retriever
 
 
 class SourceInfo(BaseModel):

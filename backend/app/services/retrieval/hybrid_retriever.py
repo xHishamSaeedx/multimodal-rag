@@ -70,6 +70,10 @@ class HybridRetriever:
         sparse_limit: Optional[int] = None,
         dense_limit: Optional[int] = None,
         filter_conditions: Optional[Dict[str, Any]] = None,
+        enable_sparse: bool = True,
+        enable_dense: bool = True,
+        enable_table: bool = True,
+        enable_image: bool = True,
     ) -> List[Dict[str, Any]]:
         """
         Retrieve chunks using hybrid search (BM25 + vector similarity).
@@ -147,10 +151,22 @@ class HybridRetriever:
             
             # Step 1: Parallel retrieval from all indexes (retrieval timing starts here)
             retrieval_start = time.time()
-            logger.info("hybrid_retrieval_parallel_start", method="async_await", collections=["text_chunks", "table_chunks", "image_chunks", "bm25"])
+            enabled_retrievers = []
+            if enable_sparse:
+                enabled_retrievers.append("bm25")
+            if enable_dense:
+                enabled_retrievers.append("text_chunks")
+            if enable_table:
+                enabled_retrievers.append("table_chunks")
+            if enable_image:
+                enabled_retrievers.append("image_chunks")
+            
+            logger.info("hybrid_retrieval_parallel_start", method="async_await", collections=enabled_retrievers)
             
             # Define async retrieval functions for parallel execution
             async def retrieve_sparse():
+                if not enable_sparse:
+                    return [], 0.0, None
                 start = time.time()
                 try:
                     logger.debug("bm25_search_start", method="async_parallel")
@@ -183,6 +199,8 @@ class HybridRetriever:
                     return [], elapsed, e
             
             async def retrieve_dense():
+                if not enable_dense:
+                    return [], 0.0, None
                 start = time.time()
                 try:
                     logger.debug("vector_search_start", collection="text_chunks", method="async_parallel")
@@ -218,6 +236,8 @@ class HybridRetriever:
                     return [], elapsed, e
             
             async def retrieve_tables():
+                if not enable_table:
+                    return [], 0.0, None
                 start = time.time()
                 try:
                     logger.debug("table_search_start", collection="table_chunks", method="async_parallel")
@@ -246,6 +266,8 @@ class HybridRetriever:
                     return [], elapsed, e
             
             async def retrieve_images():
+                if not enable_image:
+                    return [], 0.0, None
                 start = time.time()
                 try:
                     logger.debug("image_search_start", collection="image_chunks", method="async_parallel")
@@ -279,7 +301,7 @@ class HybridRetriever:
                     return [], elapsed, e
             
             # Execute all retrievers in parallel using asyncio.gather()
-            logger.debug("parallel_search_execution", method="asyncio_gather", collections=["text_chunks", "table_chunks", "image_chunks", "bm25"])
+            logger.debug("parallel_search_execution", method="asyncio_gather", collections=enabled_retrievers)
             (sparse_results, sparse_time, sparse_error), (dense_results, dense_time, dense_error), (table_results, table_time, table_error), (image_results, image_time, image_error) = await asyncio.gather(
                 retrieve_sparse(),
                 retrieve_dense(),

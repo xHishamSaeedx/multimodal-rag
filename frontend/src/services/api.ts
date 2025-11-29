@@ -69,6 +69,10 @@ export interface QueryRequest {
   limit?: number;
   include_sources?: boolean;
   filter_conditions?: Record<string, any>;
+  enable_sparse?: boolean;
+  enable_dense?: boolean;
+  enable_table?: boolean;
+  enable_image?: boolean;
 }
 
 export interface QueryResponse {
