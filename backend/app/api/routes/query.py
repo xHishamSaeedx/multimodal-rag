@@ -4,13 +4,11 @@ Query endpoint.
 POST /api/v1/query - Submit query and get answer
 """
 import time
-import traceback
 from fastapi import APIRouter, HTTPException, status, Request
 
 from app.api.schemas import QueryRequest, QueryResponse, SourceInfo, ErrorResponse
 from app.services.retrieval import HybridRetriever, HybridRetrieverError
 from app.services.generation import AnswerGenerator, AnswerGeneratorError
-from app.utils.exceptions import BaseAppException
 from app.utils.logging import get_logger
 
 logger = get_logger(__name__)

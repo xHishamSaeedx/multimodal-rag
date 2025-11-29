@@ -3,7 +3,6 @@ Image endpoints.
 
 GET /api/v1/images/{image_path}/url - Get signed URL for an image
 """
-import logging
 from fastapi import APIRouter, HTTPException, status, Query, Path as FastAPIPath
 from typing import Optional
 from urllib.parse import unquote

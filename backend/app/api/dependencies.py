@@ -3,6 +3,9 @@ FastAPI dependencies.
 
 This module contains dependency injection functions for database clients,
 configuration, and other shared resources.
+
+Note: These functions are currently unused as routes access app.state directly.
+They are kept for potential future use with FastAPI's Depends() system.
 """
 from typing import Optional
 from fastapi import Request

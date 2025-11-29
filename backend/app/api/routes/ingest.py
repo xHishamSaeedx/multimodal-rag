@@ -3,10 +3,7 @@ Document ingestion endpoint.
 
 POST /api/v1/ingest - Upload and process documents
 """
-import traceback
-from pathlib import Path
 from fastapi import APIRouter, UploadFile, File, HTTPException, status, Request, Form
-from fastapi.responses import JSONResponse
 from typing import List, Optional
 from datetime import datetime
 

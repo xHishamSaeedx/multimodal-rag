@@ -13,7 +13,6 @@ from app.utils.logging import (
     get_logger,
     set_correlation_id,
     generate_correlation_id,
-    get_correlation_id,
 )
 
 logger = get_logger(__name__)

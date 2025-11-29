@@ -5,7 +5,6 @@ GET /api/v1/documents - List all documents
 GET /api/v1/documents/{object_key} - Download a document
 DELETE /api/v1/documents/{object_key} - Delete a document
 """
-import logging
 from pathlib import Path
 from fastapi import APIRouter, HTTPException, status, Query, Path as FastAPIPath
 from fastapi.responses import Response
@@ -23,8 +22,9 @@ from app.repositories.document_repository import DocumentRepository, RepositoryE
 from app.repositories.vector_repository import VectorRepository, VectorRepositoryError
 from app.repositories.sparse_repository import SparseRepository, SparseRepositoryError
 from app.utils.exceptions import StorageError
+from app.utils.logging import get_logger
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 router = APIRouter(prefix="/documents", tags=["documents"])
 
