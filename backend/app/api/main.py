@@ -92,6 +92,45 @@ async def lifespan(app: FastAPI):
             model_type=image_embedder.model_type,
         )
         
+        # Pre-initialize captioning processor (for image captioning during ingestion)
+        logger.info("service_initialization", service="CaptioningProcessor", status="starting")
+        try:
+            from app.services.vision import VisionProcessorFactory
+            captioning_processor = VisionProcessorFactory.create_processor(mode="captioning")
+            # Pre-load the model by calling _load_model() if available
+            # This ensures the model is loaded and ready before first use
+            if hasattr(captioning_processor, '_load_model'):
+                try:
+                    captioning_processor._load_model()
+                    logger.debug("Pre-loaded captioning model")
+                except Exception as load_error:
+                    logger.warning(
+                        "service_initialization",
+                        service="CaptioningProcessor",
+                        status="model_load_failed",
+                        error=str(load_error),
+                        message="Model will be loaded lazily on first use",
+                    )
+            app.state.captioning_processor = captioning_processor
+            model_name = getattr(captioning_processor, 'model_name', 'unknown')
+            model_info = captioning_processor.get_model_info() if hasattr(captioning_processor, 'get_model_info') else {}
+            logger.info(
+                "service_initialization",
+                service="CaptioningProcessor",
+                status="ready",
+                model_name=model_name,
+                model_loaded=model_info.get('status') == 'loaded' if model_info else False,
+            )
+        except Exception as e:
+            logger.warning(
+                "service_initialization",
+                service="CaptioningProcessor",
+                status="failed",
+                error=str(e),
+                message="Captioning will be initialized lazily on first use",
+            )
+            app.state.captioning_processor = None
+        
         # Pre-initialize repositories
         logger.info("service_initialization", service="Repositories", status="starting")
         from app.repositories.vector_repository import VectorRepository

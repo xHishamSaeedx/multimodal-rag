@@ -5,7 +5,7 @@ POST /api/v1/ingest - Upload and process documents
 """
 import traceback
 from pathlib import Path
-from fastapi import APIRouter, UploadFile, File, HTTPException, status
+from fastapi import APIRouter, UploadFile, File, HTTPException, status, Request
 from fastapi.responses import JSONResponse
 from typing import List
 from datetime import datetime
@@ -37,7 +37,10 @@ router = APIRouter(prefix="/ingest", tags=["ingestion"])
         500: {"model": ErrorResponse},
     },
 )
-async def ingest_document(file: UploadFile = File(...)) -> IngestResponse:
+async def ingest_document(
+    http_request: Request,  # FastAPI will inject this automatically
+    file: UploadFile = File(...),
+) -> IngestResponse:
     """
     Upload and extract text from a document.
     
@@ -109,7 +112,27 @@ async def ingest_document(file: UploadFile = File(...)) -> IngestResponse:
         
         # Execute complete ingestion pipeline
         logger.info("ingestion_pipeline_start", file_name=file_name, file_size_bytes=len(file_bytes))
-        pipeline = IngestionPipeline()
+        
+        # Get pre-warmed services from app state (if available)
+        # These are pre-initialized in the lifespan function to avoid model loading delays
+        text_embedder = getattr(http_request.app.state, "text_embedder", None)
+        image_embedder = getattr(http_request.app.state, "image_embedder", None)
+        vision_processor = getattr(http_request.app.state, "captioning_processor", None)
+        
+        if text_embedder:
+            logger.debug("Using pre-warmed TextEmbedder from app state")
+        if image_embedder:
+            logger.debug("Using pre-warmed ImageEmbedder from app state")
+        if vision_processor:
+            logger.debug("Using pre-warmed CaptioningProcessor from app state")
+        
+        # Create pipeline with pre-warmed services (if available)
+        # If services are not pre-warmed, pipeline will create new instances
+        pipeline = IngestionPipeline(
+            text_embedder=text_embedder,
+            image_embedder=image_embedder,
+            vision_processor=vision_processor,
+        )
         
         result = pipeline.ingest_document(
             file_bytes=file_bytes,

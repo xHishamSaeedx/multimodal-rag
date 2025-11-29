@@ -55,6 +55,9 @@ class IngestionPipeline:
         self,
         chunk_size: int = 800,
         chunk_overlap: int = 150,
+        text_embedder: Optional[TextEmbedder] = None,
+        image_embedder: Optional[ImageEmbedder] = None,
+        vision_processor: Optional[Any] = None,
     ):
         """
         Initialize the ingestion pipeline.
@@ -62,6 +65,9 @@ class IngestionPipeline:
         Args:
             chunk_size: Target chunk size in tokens (default: 800)
             chunk_overlap: Overlap size in tokens (default: 150)
+            text_embedder: Optional pre-initialized TextEmbedder instance (default: None, creates new)
+            image_embedder: Optional pre-initialized ImageEmbedder instance (default: None, creates new)
+            vision_processor: Optional pre-initialized VisionProcessor instance (default: None, creates new)
         """
         self.extractor = TextExtractor()  # Keep for backward compatibility
         self.extraction_runner = ExtractionRunner(
@@ -73,8 +79,9 @@ class IngestionPipeline:
             chunk_size=chunk_size,
             chunk_overlap=chunk_overlap,
         )
-        self.embedder = TextEmbedder()  # Initialize embedding service first
-        self.image_embedder = ImageEmbedder(model_type="clip")  # Initialize image embedder (CLIP large, 768 dim)
+        # Use pre-initialized embedders if provided, otherwise create new instances
+        self.embedder = text_embedder if text_embedder is not None else TextEmbedder()
+        self.image_embedder = image_embedder if image_embedder is not None else ImageEmbedder(model_type="clip")
         
         # Initialize vector repository with embedding dimension from embedder
         # This ensures Qdrant collection matches the actual model dimensions
@@ -93,14 +100,19 @@ class IngestionPipeline:
         # Initialize sparse repository for BM25 indexing
         self.sparse_repo = SparseRepository()
         
-        # Initialize captioning processor (always generate captions during ingestion)
-        # Vision LLM mode can still be used at query time separately
-        try:
-            self.vision_processor = VisionProcessorFactory.create_processor(mode="captioning")
-            logger.info("Initialized captioning processor for image captioning during ingestion")
-        except Exception as e:
-            logger.warning(f"Failed to initialize captioning processor: {e}. Continuing without captioning.")
-            self.vision_processor = None
+        # Use pre-initialized vision processor if provided, otherwise create new
+        if vision_processor is not None:
+            self.vision_processor = vision_processor
+            logger.info("Using pre-initialized vision processor for image captioning during ingestion")
+        else:
+            # Initialize captioning processor (always generate captions during ingestion)
+            # Vision LLM mode can still be used at query time separately
+            try:
+                self.vision_processor = VisionProcessorFactory.create_processor(mode="captioning")
+                logger.info("Initialized captioning processor for image captioning during ingestion")
+            except Exception as e:
+                logger.warning(f"Failed to initialize captioning processor: {e}. Continuing without captioning.")
+                self.vision_processor = None
         
         self.storage = MinIOStorage()
         self.image_storage = SupabaseImageStorage()
