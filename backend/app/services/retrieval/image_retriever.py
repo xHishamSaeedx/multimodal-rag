@@ -129,16 +129,29 @@ class ImageRetriever:
                 results_count=len(raw_results),
             )
             
-            # Format results
+            # Format results - optimized for performance
+            # Pre-define excluded keys as set for O(1) lookup instead of O(n) list check
+            EXCLUDED_METADATA_KEYS = {
+                "chunk_id", "document_id", "text", "image_path", "caption",
+                "image_type", "filename", "document_type", "source_path",
+                "chunk_index", "chunk_type", "embedding_type"
+            }
+            
             results = []
             for result in raw_results:
+                # Cache payload and result id to avoid repeated lookups
                 payload = result.get("payload", {})
+                result_id = result.get("id", "")
+                result_score = result.get("score", 0.0)
                 
-                # Extract fields from payload
+                # Extract fields from payload with single dictionary access
+                chunk_id = payload.get("chunk_id") or result_id
+                
+                # Build formatted result directly (avoid intermediate dict operations)
                 formatted_result = {
-                    "chunk_id": payload.get("chunk_id", result.get("id", "")),
+                    "chunk_id": chunk_id,
                     "document_id": payload.get("document_id", ""),
-                    "score": result.get("score", 0.0),
+                    "score": result_score,
                     "chunk_text": payload.get("text", ""),  # Image description or caption
                     "image_path": payload.get("image_path", ""),  # Supabase storage path
                     "caption": payload.get("caption", ""),  # Image caption
@@ -151,26 +164,14 @@ class ImageRetriever:
                     "embedding_type": "image",
                 }
                 
-                # Add all other payload fields as metadata
-                metadata = {}
-                for key, value in payload.items():
-                    if key not in [
-                        "chunk_id",
-                        "document_id",
-                        "text",
-                        "image_path",
-                        "caption",
-                        "image_type",
-                        "filename",
-                        "document_type",
-                        "source_path",
-                        "chunk_index",
-                        "chunk_type",
-                        "embedding_type",
-                    ]:
-                        metadata[key] = value
+                # Use dictionary comprehension with set lookup (O(1) instead of O(n))
+                # Only iterate through payload once and filter efficiently
+                formatted_result["metadata"] = {
+                    key: value
+                    for key, value in payload.items()
+                    if key not in EXCLUDED_METADATA_KEYS
+                }
                 
-                formatted_result["metadata"] = metadata
                 results.append(formatted_result)
             
             logger.info(

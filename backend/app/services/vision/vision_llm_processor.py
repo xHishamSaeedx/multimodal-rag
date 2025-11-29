@@ -1,7 +1,7 @@
 """
 Vision LLM processor for real-time image understanding.
 
-Uses Vision LLM APIs (GPT-4V, Claude 3.5 Sonnet, etc.) to understand images
+Uses Vision LLM APIs (GPT-4V, Google Gemini, etc.) to understand images
 at query time. This provides better understanding but requires API calls.
 """
 
@@ -23,13 +23,13 @@ except ImportError:
     OPENAI_AVAILABLE = False
     OpenAI = None
 
-# Try to import Anthropic (optional dependency)
+# Try to import Google Generative AI (optional dependency)
 try:
-    from anthropic import Anthropic
-    ANTHROPIC_AVAILABLE = True
+    import google.generativeai as genai
+    GOOGLE_AVAILABLE = True
 except ImportError:
-    ANTHROPIC_AVAILABLE = False
-    Anthropic = None
+    GOOGLE_AVAILABLE = False
+    genai = None
 
 
 class VisionLLMProcessor(VisionProcessor):
@@ -37,8 +37,8 @@ class VisionLLMProcessor(VisionProcessor):
     Use Vision LLM API for real-time image understanding.
     
     Supports:
-    - OpenAI GPT-4V (gpt-4-vision-preview)
-    - Anthropic Claude 3.5 Sonnet (claude-3-5-sonnet-20241022)
+    - OpenAI GPT-4o (gpt-4o, gpt-4o-mini)
+    - Google Gemini (gemini-1.5-pro, gemini-1.5-flash)
     
     This processor is used at query time to analyze images
     based on the user's question.
@@ -49,7 +49,7 @@ class VisionLLMProcessor(VisionProcessor):
         Initialize the Vision LLM processor.
         
         Args:
-            provider: API provider ("openai" or "anthropic")
+            provider: API provider ("openai" or "google")
             model: Model name. If None, uses config default.
         """
         self.provider = provider.lower()
@@ -58,10 +58,10 @@ class VisionLLMProcessor(VisionProcessor):
         self._api_key = None
         
         # Validate provider
-        if self.provider not in ["openai", "anthropic"]:
+        if self.provider not in ["openai", "google"]:
             raise ValueError(
                 f"Unknown provider: {self.provider}. "
-                f"Supported providers: 'openai', 'anthropic'"
+                f"Supported providers: 'openai', 'google'"
             )
         
         # Check availability
@@ -70,19 +70,36 @@ class VisionLLMProcessor(VisionProcessor):
                 "OpenAI library not available. "
                 "Install with: pip install openai"
             )
-        elif self.provider == "anthropic" and not ANTHROPIC_AVAILABLE:
+        elif self.provider == "google" and not GOOGLE_AVAILABLE:
             logger.warning(
-                "Anthropic library not available. "
-                "Install with: pip install anthropic"
+                "Google Generative AI library not available. "
+                "Install with: pip install google-generativeai"
+            )
+        
+        # Pre-warm the client at initialization (not lazy)
+        # This ensures the API client is ready immediately, not on first use
+        try:
+            if self.is_available():
+                self._get_client()  # Initialize client immediately
+                logger.info(f"Pre-warmed {self.provider} Vision LLM client (model: {self.model})")
+            else:
+                logger.warning(
+                    f"{self.provider} Vision LLM not available - missing library or API key. "
+                    f"Vision processing will fail at runtime."
+                )
+        except Exception as e:
+            logger.warning(
+                f"Failed to pre-warm {self.provider} Vision LLM client: {e}. "
+                f"It will be initialized on first use (slower)."
             )
     
     def _get_default_model(self) -> str:
         """Get default model name based on provider."""
         if self.provider == "openai":
-            return getattr(settings, "vision_llm_model", "gpt-4-vision-preview")
-        elif self.provider == "anthropic":
-            return "claude-3-5-sonnet-20241022"
-        return "gpt-4-vision-preview"
+            return getattr(settings, "vision_llm_model", "gpt-4o")
+        elif self.provider == "google":
+            return getattr(settings, "vision_llm_model", "gemini-1.5-pro")
+        return "gpt-4o"
     
     def _get_client(self):
         """Lazy load API client."""
@@ -106,24 +123,25 @@ class VisionLLMProcessor(VisionProcessor):
                 self._client = OpenAI(api_key=self._api_key)
                 logger.info("Initialized OpenAI client for Vision LLM")
             
-            elif self.provider == "anthropic":
-                if not ANTHROPIC_AVAILABLE:
+            elif self.provider == "google":
+                if not GOOGLE_AVAILABLE:
                     raise VisionProcessingError(
-                        "Anthropic library not available. "
-                        "Install with: pip install anthropic",
+                        "Google Generative AI library not available. "
+                        "Install with: pip install google-generativeai",
                         {"provider": self.provider}
                     )
                 
-                self._api_key = getattr(settings, "anthropic_api_key", None)
+                self._api_key = getattr(settings, "google_api_key", None)
                 if not self._api_key:
                     raise VisionProcessingError(
-                        "Anthropic API key not configured. "
-                        "Set ANTHROPIC_API_KEY in your .env file.",
+                        "Google API key not configured. "
+                        "Set GOOGLE_API_KEY in your .env file.",
                         {"provider": self.provider}
                     )
                 
-                self._client = Anthropic(api_key=self._api_key)
-                logger.info("Initialized Anthropic client for Vision LLM")
+                genai.configure(api_key=self._api_key)
+                self._client = genai.GenerativeModel(self.model)
+                logger.info(f"Initialized Google Gemini client for Vision LLM (model: {self.model})")
         
         return self._client
     
@@ -177,8 +195,8 @@ class VisionLLMProcessor(VisionProcessor):
             
             if self.provider == "openai":
                 return self._process_openai(client, image_b64, image_mime, prompt)
-            elif self.provider == "anthropic":
-                return self._process_anthropic(client, image_b64, image_mime, prompt)
+            elif self.provider == "google":
+                return self._process_google(client, image_b64, image_mime, prompt)
             else:
                 raise VisionProcessingError(
                     f"Unknown provider: {self.provider}",
@@ -236,50 +254,42 @@ class VisionLLMProcessor(VisionProcessor):
                 {"provider": "openai", "model": self.model, "error": str(e)}
             ) from e
     
-    def _process_anthropic(self, client, image_b64: str, image_mime: str, prompt: str) -> VisionResult:
-        """Process image with Anthropic Claude."""
+    def _process_google(self, client, image_b64: str, image_mime: str, prompt: str) -> VisionResult:
+        """Process image with Google Gemini."""
         try:
-            response = client.messages.create(
-                model=self.model,
-                max_tokens=500,
-                messages=[
-                    {
-                        "role": "user",
-                        "content": [
-                            {
-                                "type": "image",
-                                "source": {
-                                    "type": "base64",
-                                    "media_type": image_mime,
-                                    "data": image_b64,
-                                }
-                            },
-                            {
-                                "type": "text",
-                                "text": prompt
-                            }
-                        ]
-                    }
-                ]
-            )
+            from PIL import Image
+            import io
             
-            description = response.content[0].text
+            # Decode base64 image
+            image_data = base64.b64decode(image_b64)
+            image = Image.open(io.BytesIO(image_data))
+            
+            # Generate content with image and prompt
+            response = client.generate_content([prompt, image])
+            
+            description = response.text
+            
+            # Extract token usage if available
+            tokens_used = None
+            if hasattr(response, 'usage_metadata'):
+                usage = response.usage_metadata
+                tokens_used = usage.prompt_token_count + usage.candidates_token_count if usage else None
             
             return VisionResult(
                 description=description,
                 metadata={
-                    "provider": "anthropic",
+                    "provider": "google",
                     "model": self.model,
                     "mode": "vision_llm",
-                    "tokens_used": response.usage.input_tokens + response.usage.output_tokens if hasattr(response, 'usage') else None,
+                    "tokens_used": tokens_used,
                 },
-                confidence=None,  # Anthropic doesn't provide confidence scores
+                confidence=None,  # Google doesn't provide confidence scores
             )
         
         except Exception as e:
             raise VisionProcessingError(
-                f"Anthropic API error: {str(e)}",
-                {"provider": "anthropic", "model": self.model, "error": str(e)}
+                f"Google Gemini API error: {str(e)}",
+                {"provider": "google", "model": self.model, "error": str(e)}
             ) from e
     
     def get_mode(self) -> str:
@@ -295,7 +305,7 @@ class VisionLLMProcessor(VisionProcessor):
         """
         if self.provider == "openai":
             return OPENAI_AVAILABLE and bool(getattr(settings, "openai_api_key", None))
-        elif self.provider == "anthropic":
-            return ANTHROPIC_AVAILABLE and bool(getattr(settings, "anthropic_api_key", None))
+        elif self.provider == "google":
+            return GOOGLE_AVAILABLE and bool(getattr(settings, "google_api_key", None))
         return False
 

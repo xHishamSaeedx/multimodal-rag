@@ -29,15 +29,20 @@ async def lifespan(app: FastAPI):
     Pre-initializes services at startup:
     - Elasticsearch client
     - Qdrant client
+    - Supabase client
     - TextEmbedder (embedding model)
-    - HybridRetriever and its dependencies
+    - ImageEmbedder (embedding model)
+    - All retrievers (Sparse, Dense, Table, Image, Hybrid)
+    - AnswerGenerator with all dependencies
+    
+    Everything is pre-warmed and ready to handle queries immediately.
     
     Cleans up resources on shutdown.
     """
     # Startup: Pre-initialize all services
     logger.info(
         "application_startup",
-        message="Starting application - Pre-warming services...",
+        message="Starting application - Pre-warming all services and models...",
     )
     
     try:
@@ -54,7 +59,14 @@ async def lifespan(app: FastAPI):
         app.state.qdrant_client = qdrant_client
         logger.info("service_initialization", service="Qdrant", status="ready")
         
-        # Pre-initialize embedding model (this is the expensive one!)
+        # Pre-initialize Supabase client (needed for AnswerGenerator)
+        logger.info("service_initialization", service="Supabase", status="starting")
+        from app.core.database import get_supabase_client
+        supabase_client = get_supabase_client()
+        app.state.supabase_client = supabase_client
+        logger.info("service_initialization", service="Supabase", status="ready")
+        
+        # Pre-initialize embedding models (these are expensive!)
         logger.info("service_initialization", service="TextEmbedder", status="starting")
         from app.services.embedding.text_embedder import TextEmbedder
         text_embedder = TextEmbedder()
@@ -67,6 +79,19 @@ async def lifespan(app: FastAPI):
             embedding_dim=text_embedder.embedding_dim,
         )
         
+        logger.info("service_initialization", service="ImageEmbedder", status="starting")
+        from app.services.embedding.image_embedder import ImageEmbedder
+        image_embedder = ImageEmbedder(model_type="clip")
+        app.state.image_embedder = image_embedder
+        logger.info(
+            "service_initialization",
+            service="ImageEmbedder",
+            status="ready",
+            model_name=image_embedder.model_name,
+            embedding_dim=image_embedder.embedding_dim,
+            model_type=image_embedder.model_type,
+        )
+        
         # Pre-initialize repositories
         logger.info("service_initialization", service="Repositories", status="starting")
         from app.repositories.vector_repository import VectorRepository
@@ -77,10 +102,12 @@ async def lifespan(app: FastAPI):
         app.state.sparse_repository = sparse_repo
         logger.info("service_initialization", service="Repositories", status="ready")
         
-        # Pre-initialize retrievers
+        # Pre-initialize all retrievers with pre-warmed models
         logger.info("service_initialization", service="Retrievers", status="starting")
         from app.services.retrieval.dense_retriever import DenseRetriever
         from app.services.retrieval.sparse_retriever import SparseRetriever
+        from app.services.retrieval.table_retriever import TableRetriever
+        from app.services.retrieval.image_retriever import ImageRetriever
         from app.services.retrieval.hybrid_retriever import HybridRetriever
         
         dense_retriever = DenseRetriever(
@@ -88,16 +115,51 @@ async def lifespan(app: FastAPI):
             embedder=text_embedder
         )
         sparse_retriever = SparseRetriever(sparse_repository=sparse_repo)
+        table_retriever = TableRetriever(embedder=text_embedder)
+        image_retriever = ImageRetriever(embedder=image_embedder)
+        
+        # Pre-initialize HybridRetriever with all pre-warmed retrievers
         hybrid_retriever = HybridRetriever(
             sparse_retriever=sparse_retriever,
-            dense_retriever=dense_retriever
+            dense_retriever=dense_retriever,
+            table_retriever=table_retriever,
+            image_retriever=image_retriever,
         )
         app.state.hybrid_retriever = hybrid_retriever
         logger.info("service_initialization", service="HybridRetriever", status="ready")
         
+        # Pre-initialize AnswerGenerator (includes Supabase storage, Groq client, vision processor)
+        logger.info("service_initialization", service="AnswerGenerator", status="starting")
+        from app.services.generation.answer_generator import AnswerGenerator
+        answer_generator = AnswerGenerator()
+        app.state.answer_generator = answer_generator
+        
+        # Log vision processor status
+        vision_info = {}
+        if answer_generator.vision_processor:
+            vision_info = {
+                "vision_mode": "vision_llm",
+                "vision_provider": getattr(settings, "vision_llm_provider", "unknown"),
+                "vision_model": getattr(settings, "vision_llm_model", "unknown"),
+                "vision_ready": True,
+            }
+        else:
+            vision_info = {
+                "vision_mode": "captioning",
+                "vision_ready": False,
+            }
+        
+        logger.info(
+            "service_initialization",
+            service="AnswerGenerator",
+            status="ready",
+            model=answer_generator.model,
+            **vision_info,
+        )
+        
         logger.info(
             "application_startup",
-            message="All services pre-warmed and ready!",
+            message="All services and models pre-warmed and ready to handle queries!",
             status="ready",
         )
         
@@ -112,7 +174,7 @@ async def lifespan(app: FastAPI):
         # Services will be initialized lazily on first use
         logger.warning(
             "application_startup_fallback",
-            message="Services will be initialized lazily on first request",
+            message="Some services failed to initialize. They will be initialized lazily on first request",
         )
     
     yield

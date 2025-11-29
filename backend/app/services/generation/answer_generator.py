@@ -94,16 +94,30 @@ If the context doesn't contain the answer, say "I don't have that information"."
         self.image_storage = SupabaseImageStorage()  # For generating image URLs
         
         # Initialize vision processor if in vision_llm mode (for query-time processing)
+        # Pre-warm the processor and its API client at startup for better performance
         try:
             vision_mode = getattr(settings, "vision_processing_mode", "captioning")
             if vision_mode == "vision_llm":
                 self.vision_processor = VisionProcessorFactory.create_processor(mode="vision_llm")
-                logger.info("Initialized Vision LLM processor for query-time image understanding")
+                # The processor will pre-warm its API client during initialization
+                provider = getattr(settings, "vision_llm_provider", "openai")
+                model = getattr(settings, "vision_llm_model", "gpt-4o")
+                logger.info(
+                    "vision_processor_initialized",
+                    provider=provider,
+                    model=model,
+                    mode="vision_llm",
+                    message="Vision LLM processor pre-warmed and ready for query-time image understanding"
+                )
             else:
                 self.vision_processor = None
                 logger.debug("Using captioning mode - captions generated during ingestion")
         except Exception as e:
-            logger.warning(f"Failed to initialize vision processor: {e}. Will use stored captions.")
+            logger.warning(
+                "vision_processor_init_failed",
+                error=str(e),
+                message="Failed to initialize vision processor. Will use stored captions."
+            )
             self.vision_processor = None
         
         if not self.api_key:

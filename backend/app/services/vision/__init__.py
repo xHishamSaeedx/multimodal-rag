@@ -3,7 +3,7 @@ Vision processing services.
 
 Provides modular vision understanding capabilities:
 - Captioning pipeline (BLIP-2, etc.)
-- Vision LLM pipeline (GPT-4V, Claude, etc.)
+- Vision LLM pipeline (GPT-4V, Google Gemini, etc.)
 """
 
 from app.services.vision.processor import VisionProcessor, VisionResult

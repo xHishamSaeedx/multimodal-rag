@@ -69,12 +69,17 @@ class Settings(BaseSettings):
     
     # Vision Processing Settings
     vision_processing_mode: str = "captioning"  # "captioning" or "vision_llm"
-    vision_llm_provider: str = "openai"  # "openai" or "anthropic"
-    vision_llm_model: str = "gpt-4-vision-preview"  # OpenAI model name
+    vision_llm_provider: str = "openai"  # "openai" or "google"
+    vision_llm_model: str = "gpt-4o"  # Model name (OpenAI: gpt-4o or gpt-4o-mini, Google: gemini-1.5-pro or gemini-1.5-flash)
     captioning_model: str = "Salesforce/blip-image-captioning-base"  # BLIP model for captioning
+    
+    # Vision LLM API Keys
+    openai_api_key: Optional[str] = None  # Required when vision_llm_provider="openai"
+    google_api_key: Optional[str] = None  # Required when vision_llm_provider="google"
     
     # Note: These can be overridden via environment variables:
     # VISION_PROCESSING_MODE, VISION_LLM_PROVIDER, VISION_LLM_MODEL, CAPTIONING_MODEL
+    # OPENAI_API_KEY, GOOGLE_API_KEY
     
     # Observability Settings (Optional)
     loki_enabled: bool = False  # Whether to push logs directly to Loki (optional, Promtail handles collection)

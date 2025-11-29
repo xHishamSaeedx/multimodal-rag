@@ -152,9 +152,9 @@ Vision mode determines how images are processed during answer generation:
   - Uses local BLIP models for captioning
   - Captions are generated once during ingestion
   
-- **Vision LLM Mode**: Uses Vision LLM APIs (GPT-4V, Claude, etc.) for real-time image understanding
+- **Vision LLM Mode**: Uses Vision LLM APIs (GPT-4V, Google Gemini, etc.) for real-time image understanding
   - More accurate and context-aware (processes images with the actual query)
-  - Requires API keys (OpenAI or Anthropic)
+  - Requires API keys (OpenAI or Google)
   - Processes images on-demand during query time
   - Better for complex charts, graphs, and diagrams
 
@@ -170,8 +170,8 @@ Vision mode is controlled by the `vision_processing_mode` setting in `backend/ap
 
 2. **Configuration Options**:
    - `vision_processing_mode`: `"captioning"` (default) or `"vision_llm"`
-   - `vision_llm_provider`: `"openai"` or `"anthropic"` (when using vision_llm mode)
-   - `vision_llm_model`: Model name (e.g., `"gpt-4-vision-preview"` for OpenAI)
+   - `vision_llm_provider`: `"openai"` or `"google"` (when using vision_llm mode)
+   - `vision_llm_model`: Model name (e.g., `"gpt-4o"` or `"gpt-4o-mini"` for OpenAI, `"gemini-1.5-pro"` for Google)
 
 3. **When Vision LLM Mode is Enabled**:
    - `AnswerGenerator` initializes a `VisionProcessor` during startup
@@ -186,7 +186,7 @@ Vision mode is controlled by the `vision_processing_mode` setting in `backend/ap
 
 **Note**: Vision LLM mode requires appropriate API keys:
 - For OpenAI: Set `OPENAI_API_KEY` environment variable
-- For Anthropic: Set `ANTHROPIC_API_KEY` environment variable
+- For Google: Set `GOOGLE_API_KEY` environment variable
 
 ## Data Flow
 

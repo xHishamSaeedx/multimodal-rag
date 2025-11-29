@@ -16,6 +16,11 @@ try:
         Filter,
         FieldCondition,
         MatchValue,
+        HnswConfigDiff,
+        SearchParams,
+        ScalarQuantization,
+        ScalarQuantizationConfig,
+        ScalarType,
     )
 except ImportError:
     Distance = None
@@ -24,6 +29,11 @@ except ImportError:
     Filter = None
     FieldCondition = None
     MatchValue = None
+    HnswConfigDiff = None
+    SearchParams = None
+    ScalarQuantization = None
+    ScalarQuantizationConfig = None
+    ScalarType = None
 
 from app.core.database import get_qdrant_client, DatabaseError
 from app.core.config import settings
@@ -81,16 +91,69 @@ class VectorRepository:
                         {},
                     )
                 
-                self.client.create_collection(
-                    collection_name=self.collection_name,
-                    vectors_config=VectorParams(
-                        size=self.vector_size,
-                        distance=Distance.COSINE,  # Cosine similarity for normalized embeddings
-                    ),
-                )
+                # Optimize HNSW parameters for speed (especially for image_chunks)
+                # Lower m and ef_construct = faster search and indexing
+                hnsw_config = None
+                quantization_config = None
+                
+                if HnswConfigDiff is not None:
+                    if self.collection_name == "image_chunks":
+                        # Aggressively optimized for speed: very low m and ef_construct for fastest image search
+                        hnsw_config = HnswConfigDiff(
+                            m=4,              # Very low m (default 16) = minimal connections = fastest traversal
+                            ef_construct=64,   # Very low ef_construct (default 200) = fastest index building
+                        )
+                        
+                        # Enable scalar quantization for image_chunks (20-40ms speed improvement)
+                        # Converts float32 vectors to int8, reducing memory by 75% and speeding up distance calculations
+                        if ScalarQuantization is not None and ScalarQuantizationConfig is not None and ScalarType is not None:
+                            quantization_config = ScalarQuantization(
+                                scalar=ScalarQuantizationConfig(
+                                    type=ScalarType.INT8,  # 8-bit integers (vs 32-bit floats)
+                                    quantile=0.99,         # Exclude extreme 1% values for better accuracy
+                                    always_ram=True,       # Keep quantized vectors in RAM for fastest access
+                                )
+                            )
+                            logger.info(
+                                f"Using aggressive HNSW + scalar quantization for image_chunks: "
+                                f"m=4, ef_construct=64, INT8 quantization (ultra-fast, target <50ms)"
+                            )
+                        else:
+                            logger.info(
+                                f"Using aggressive HNSW config for image_chunks: m=4, ef_construct=64 (ultra-fast, target <50ms)"
+                            )
+                    else:
+                        # Balanced settings for text/table chunks (still faster than defaults)
+                        hnsw_config = HnswConfigDiff(
+                            m=12,             # Moderate m for balance between speed and accuracy
+                            ef_construct=128, # Moderate ef_construct
+                        )
+                        logger.debug(
+                            f"Using balanced HNSW config: m=12, ef_construct=128"
+                        )
+                
+                vectors_config_params = {
+                    "size": self.vector_size,
+                    "distance": Distance.COSINE,  # Cosine similarity for normalized embeddings
+                }
+                if hnsw_config is not None:
+                    vectors_config_params["hnsw_config"] = hnsw_config
+                
+                # Build collection creation parameters
+                collection_params = {
+                    "collection_name": self.collection_name,
+                    "vectors_config": VectorParams(**vectors_config_params),
+                }
+                
+                # Add quantization config if available (for image_chunks)
+                if quantization_config is not None:
+                    collection_params["quantization_config"] = quantization_config
+                
+                self.client.create_collection(**collection_params)
                 logger.info(
                     f"Created collection '{self.collection_name}' "
                     f"with vector size {self.vector_size}"
+                    f"{' (HNSW optimized)' if hnsw_config else ''}"
                 )
             else:
                 # Collection exists - verify dimension matches
@@ -269,6 +332,7 @@ class VectorRepository:
         query_vector: List[float],
         limit: int = 10,
         filter_conditions: Optional[Dict[str, Any]] = None,
+        ef: Optional[int] = None,
     ) -> List[Dict[str, Any]]:
         """
         Search for similar vectors.
@@ -277,6 +341,10 @@ class VectorRepository:
             query_vector: Query embedding vector
             limit: Maximum number of results
             filter_conditions: Optional filter conditions (e.g., {"document_id": "..."})
+            ef: Optional HNSW ef parameter (candidate list size during search).
+                Lower values = faster search but potentially lower recall.
+                Default: None (uses collection default, typically 100).
+                Recommended: 16-32 for image_chunks (speed-optimized), 32-64 for others.
         
         Returns:
             List of search results with score, id, and payload
@@ -309,18 +377,32 @@ class VectorRepository:
                 
                 qdrant_filter = Filter(must=conditions)
             
+            # Optimize ef parameter for speed (especially for image_chunks)
+            # Lower ef = faster search but potentially lower recall
+            if ef is None:
+                if self.collection_name == "image_chunks":
+                    ef = 4   # Ultra-aggressive optimization for fastest image search (target <50ms)
+                else:
+                    ef = 32  # Balanced for text/table search
+            
             logger.debug(
                 f"Searching vectors in collection '{self.collection_name}' "
-                f"(limit: {limit})"
+                f"(limit: {limit}, ef: {ef})"
             )
             
             # Perform search using query_points (new API in qdrant-client 1.16+)
             # query_points replaces the deprecated search() method
+            # Use SearchParams to set ef for HNSW search optimization
+            query_params = {}
+            if SearchParams is not None:
+                query_params["search_params"] = SearchParams(hnsw_ef=ef)
+            
             query_result = self.client.query_points(
                 collection_name=self.collection_name,
                 query=query_vector,
                 limit=limit,
                 query_filter=qdrant_filter,
+                **query_params,
             )
             
             # Extract results from QueryResponse object

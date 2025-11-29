@@ -20,7 +20,7 @@ class VisionProcessorFactory:
     
     Supports multiple processing modes:
     - "captioning": Generate captions using local models (BLIP-2, etc.)
-    - "vision_llm": Use Vision LLM APIs (GPT-4V, Claude, etc.)
+    - "vision_llm": Use Vision LLM APIs (GPT-4V, Google Gemini, etc.)
     """
     
     @staticmethod
@@ -50,7 +50,7 @@ class VisionProcessorFactory:
         elif mode == "vision_llm":
             from app.services.vision.vision_llm_processor import VisionLLMProcessor
             provider = getattr(settings, "vision_llm_provider", "openai")
-            model = getattr(settings, "vision_llm_model", "gpt-4-vision-preview")
+            model = getattr(settings, "vision_llm_model", "gpt-4o")
             return VisionLLMProcessor(provider=provider, model=model)
         
         else:

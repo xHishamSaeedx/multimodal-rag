@@ -20,6 +20,8 @@ sentence-transformers>=2.2.0  # Embeddings (e5-base-v2, etc.)
 torch>=2.0.0  # Required by sentence-transformers
 torchvision>=0.15.0  # Required for some vision models
 groq>=0.4.0  # Groq API client for answer generation
+openai>=1.0.0  # OpenAI API client for vision processing (GPT-4V)
+google-generativeai>=0.3.0  # Google Gemini API client for vision processing
 
 # Document extraction libraries
 PyMuPDF>=1.23.0  # PDF extraction (fitz)

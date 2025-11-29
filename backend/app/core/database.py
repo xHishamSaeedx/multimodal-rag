@@ -117,14 +117,17 @@ def get_qdrant_client() -> QdrantClientLib:
         )
     
     try:
+        # Use gRPC for better performance (lower latency than HTTP)
+        # gRPC is preferred for vector operations, HTTP is fallback for compatibility
         _qdrant_client = QdrantClientLib(
             host=settings.qdrant_host,
-            port=settings.qdrant_port,
-            grpc_port=settings.qdrant_grpc_port,
+            port=settings.qdrant_port,  # HTTP port (fallback)
+            grpc_port=settings.qdrant_grpc_port,  # gRPC port (preferred)
             timeout=settings.qdrant_timeout,
+            prefer_grpc=True,  # Prefer gRPC for better performance
         )
         logger.info(
-            f"Initialized Qdrant client: {settings.qdrant_host}:{settings.qdrant_port}"
+            f"Initialized Qdrant client (gRPC preferred): {settings.qdrant_host}:{settings.qdrant_grpc_port} (gRPC), {settings.qdrant_port} (HTTP fallback)"
         )
         return _qdrant_client
     except Exception as e:

@@ -130,7 +130,15 @@ async def query(
         
         # Step 2: Generate answer using Groq LLM
         logger.debug("answer_generation_start", chunks_count=len(retrieved_chunks))
-        answer_generator = AnswerGenerator()
+        # Use pre-initialized AnswerGenerator from app state
+        answer_generator = getattr(http_request.app.state, "answer_generator", None)
+        if answer_generator is None:
+            # Fallback: create new instance if not pre-initialized
+            logger.warning(
+                "answer_generator_not_preinitialized",
+                message="AnswerGenerator not pre-initialized, creating new instance (slower)",
+            )
+            answer_generator = AnswerGenerator()
         
         llm_start_time = time.time()
         generation_result = answer_generator.generate_answer(

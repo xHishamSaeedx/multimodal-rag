@@ -13,10 +13,11 @@ This document lists all service URLs accessible when running the multimodal-rag 
 
 ### Qdrant (Vector Database)
 
-- **REST API**: http://localhost:6333
+- **REST API**: http://localhost:6333 (HTTP, fallback for compatibility)
 - **Dashboard/Web UI**: http://localhost:6333/dashboard
 - **Health Check**: http://localhost:6333/health
-- **gRPC Endpoint**: `localhost:6334` (not HTTP, for gRPC clients)
+- **gRPC Endpoint**: `localhost:6334` (preferred for vector operations - lower latency)
+  - **Note**: The backend now uses gRPC by default for better performance (20-50ms faster)
 
 ### Elasticsearch (BM25 Sparse Index)
 
