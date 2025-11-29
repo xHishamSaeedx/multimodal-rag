@@ -26,7 +26,8 @@ const Chat: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
   const [expandedImage, setExpandedImage] = useState<{ url: string; alt: string } | null>(null);
   const [imageStates, setImageStates] = useState<Map<string, ImageState>>(new Map());
-  const messagesEndRef = useRef<HTMLDivElement>(null);
+  const [expandedSources, setExpandedSources] = useState<Set<string>>(new Set());
+  const messagesContainerRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const refreshTimersRef = useRef<Map<string, NodeJS.Timeout>>(new Map());
   
@@ -36,13 +37,6 @@ const Chat: React.FC = () => {
   const [enableTable, setEnableTable] = useState(true);
   const [enableImage, setEnableImage] = useState(true);
 
-  const scrollToBottom = () => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  };
-
-  useEffect(() => {
-    scrollToBottom();
-  }, [messages]);
 
   useEffect(() => {
     // Add welcome message
@@ -323,6 +317,18 @@ const Chat: React.FC = () => {
     return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
   };
 
+  const toggleSources = (messageId: string) => {
+    setExpandedSources((prev) => {
+      const newSet = new Set(prev);
+      if (newSet.has(messageId)) {
+        newSet.delete(messageId);
+      } else {
+        newSet.add(messageId);
+      }
+      return newSet;
+    });
+  };
+
   return (
     <div className="chat-container">
       <div className="chat-header">
@@ -393,7 +399,7 @@ const Chat: React.FC = () => {
         </div>
       </div>
 
-      <div className="chat-messages">
+      <div className="chat-messages" ref={messagesContainerRef}>
         {messages.map((message) => (
           <div
             key={message.id}
@@ -412,8 +418,29 @@ const Chat: React.FC = () => {
               
               {message.sources && message.sources.length > 0 && (
                 <div className="message-sources">
-                  <div className="sources-header">Sources:</div>
-                  {message.sources.map((source, index) => {
+                  <button
+                    className="sources-toggle-button"
+                    onClick={() => toggleSources(message.id)}
+                    aria-expanded={expandedSources.has(message.id)}
+                  >
+                    <span className="sources-header">Sources ({message.sources.length})</span>
+                    <svg
+                      className={`sources-arrow ${expandedSources.has(message.id) ? 'expanded' : ''}`}
+                      width="16"
+                      height="16"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="2"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                    >
+                      <polyline points="6 9 12 15 18 9"></polyline>
+                    </svg>
+                  </button>
+                  {expandedSources.has(message.id) && (
+                    <div className="sources-content">
+                      {message.sources.map((source, index) => {
                     const hasImage = source.image_path && source.image_url;
                     const imageKey = source.image_path || '';
                     const imageState = imageKey ? imageStates.get(imageKey) : null;
@@ -466,7 +493,9 @@ const Chat: React.FC = () => {
                         <div className="source-preview">{source.chunk_text}</div>
                       </div>
                     );
-                  })}
+                      })}
+                    </div>
+                  )}
                 </div>
               )}
               
@@ -486,8 +515,6 @@ const Chat: React.FC = () => {
             </div>
           </div>
         )}
-        
-        <div ref={messagesEndRef} />
       </div>
 
       {error && (

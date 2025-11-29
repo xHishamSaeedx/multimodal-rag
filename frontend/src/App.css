@@ -14,10 +14,10 @@
 
 .chat-section {
   background-color: #f9f9f9;
-  padding: 6rem 2rem;
+  padding: 1rem 2rem;
   min-height: 100vh;
   display: flex;
-  align-items: center;
+  align-items: flex-start;
 }
 
 .documents-section {
@@ -32,7 +32,7 @@
   }
 
   .chat-section {
-    padding: 4rem 1rem;
+    padding: 1rem 1rem;
   }
 
   .documents-section {
