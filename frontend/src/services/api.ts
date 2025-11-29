@@ -94,9 +94,29 @@ export const api = {
   /**
    * Upload a single document for ingestion
    */
-  uploadDocument: async (file: File): Promise<IngestResponse> => {
+  uploadDocument: async (
+    file: File,
+    options?: {
+      enableText?: boolean;
+      enableTables?: boolean;
+      enableImages?: boolean;
+    }
+  ): Promise<IngestResponse> => {
     const formData = new FormData();
     formData.append('file', file);
+    
+    // Add processor configuration options
+    // Explicitly convert boolean to string, defaulting to true if undefined
+    const enableText = options?.enableText !== undefined ? String(options.enableText) : 'true';
+    const enableTables = options?.enableTables !== undefined ? String(options.enableTables) : 'true';
+    const enableImages = options?.enableImages !== undefined ? String(options.enableImages) : 'true';
+    
+    formData.append('enable_text', enableText);
+    formData.append('enable_tables', enableTables);
+    formData.append('enable_images', enableImages);
+    
+    // Debug: log what we're sending
+    console.log('Sending processor config:', { enableText, enableTables, enableImages });
 
     const response = await apiClient.post<IngestResponse>(
       '/api/v1/ingest',

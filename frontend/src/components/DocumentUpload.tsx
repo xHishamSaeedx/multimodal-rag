@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useRef } from 'react';
+import React, { useState, useCallback, useRef, useEffect } from 'react';
 import { api, IngestResponse } from '../services/api';
 import './DocumentUpload.css';
 
@@ -12,6 +12,29 @@ const DocumentUpload: React.FC = () => {
   const [uploadResults, setUploadResults] = useState<UploadResult[]>([]);
   const [error, setError] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  
+  // Processor configuration state
+  const [enableText, setEnableText] = useState(true);
+  const [enableTables, setEnableTables] = useState(true);
+  const [enableImages, setEnableImages] = useState(true);
+  
+  // Refs to always get the latest state values (avoid stale closures)
+  const enableTextRef = useRef(enableText);
+  const enableTablesRef = useRef(enableTables);
+  const enableImagesRef = useRef(enableImages);
+  
+  // Keep refs in sync with state
+  useEffect(() => {
+    enableTextRef.current = enableText;
+  }, [enableText]);
+  
+  useEffect(() => {
+    enableTablesRef.current = enableTables;
+  }, [enableTables]);
+  
+  useEffect(() => {
+    enableImagesRef.current = enableImages;
+  }, [enableImages]);
 
   const supportedTypes = ['.pdf', '.docx', '.txt', '.md', '.markdown'];
   const maxFileSize = 50 * 1024 * 1024; // 50MB
@@ -30,20 +53,36 @@ const DocumentUpload: React.FC = () => {
     return null;
   };
 
-  const uploadFile = async (file: File) => {
+  const uploadFile = useCallback(async (file: File) => {
     const validationError = validateFile(file);
     if (validationError) {
       throw new Error(validationError);
     }
 
+    // Use refs to get the latest state values (avoid stale closures)
+    const currentEnableText = enableTextRef.current;
+    const currentEnableTables = enableTablesRef.current;
+    const currentEnableImages = enableImagesRef.current;
+
+    // Debug: Log current state values
+    console.log('Upload file - Current state:', { 
+      enableText: currentEnableText, 
+      enableTables: currentEnableTables, 
+      enableImages: currentEnableImages 
+    });
+
     try {
-      const result = await api.uploadDocument(file);
+      const result = await api.uploadDocument(file, {
+        enableText: currentEnableText,
+        enableTables: currentEnableTables,
+        enableImages: currentEnableImages,
+      });
       return { ...result, file };
     } catch (err: any) {
       const errorMessage = err.response?.data?.error || err.response?.data?.detail?.error || err.message || 'Upload failed';
       throw new Error(errorMessage);
     }
-  };
+  }, []); // Empty deps - we use refs to get latest values
 
   const handleFiles = useCallback(async (files: FileList | null) => {
     if (!files || files.length === 0) return;
@@ -80,7 +119,7 @@ const DocumentUpload: React.FC = () => {
     } finally {
       setIsUploading(false);
     }
-  }, []);
+  }, [uploadFile]);
 
   const handleDragEnter = useCallback((e: React.DragEvent) => {
     e.preventDefault();
@@ -143,6 +182,64 @@ const DocumentUpload: React.FC = () => {
 
   return (
     <div className="document-upload-container">
+      <div className="processor-config-wrapper">
+        <div className="processor-config">
+          <div className="processor-header">
+            <h3>Document Processors</h3>
+            <p className="processor-description">
+              Select which content types to process from your documents
+            </p>
+          </div>
+          <div className="processor-options">
+            <label className={`processor-option ${enableText ? 'active' : ''}`}>
+              <div className="processor-checkbox-wrapper">
+                <input
+                  type="checkbox"
+                  checked={enableText}
+                  onChange={(e) => {
+                    console.log('Text checkbox changed:', e.target.checked);
+                    setEnableText(e.target.checked);
+                  }}
+                  disabled={isUploading}
+                />
+                <span className="processor-label">Text</span>
+              </div>
+              <span className="processor-hint">Extract and process text content</span>
+            </label>
+            <label className={`processor-option ${enableTables ? 'active' : ''}`}>
+              <div className="processor-checkbox-wrapper">
+                <input
+                  type="checkbox"
+                  checked={enableTables}
+                  onChange={(e) => {
+                    console.log('Tables checkbox changed:', e.target.checked);
+                    setEnableTables(e.target.checked);
+                  }}
+                  disabled={isUploading}
+                />
+                <span className="processor-label">Tables</span>
+              </div>
+              <span className="processor-hint">Extract and process table structures</span>
+            </label>
+            <label className={`processor-option ${enableImages ? 'active' : ''}`}>
+              <div className="processor-checkbox-wrapper">
+                <input
+                  type="checkbox"
+                  checked={enableImages}
+                  onChange={(e) => {
+                    console.log('Images checkbox changed:', e.target.checked);
+                    setEnableImages(e.target.checked);
+                  }}
+                  disabled={isUploading}
+                />
+                <span className="processor-label">Images</span>
+              </div>
+              <span className="processor-hint">Extract and process images with captions</span>
+            </label>
+          </div>
+        </div>
+      </div>
+
       <div className="upload-section">
         <h1>Document Upload</h1>
         <p className="upload-description">

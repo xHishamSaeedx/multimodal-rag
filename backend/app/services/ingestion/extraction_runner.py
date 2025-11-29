@@ -10,6 +10,7 @@ import logging
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import Tuple
 from pathlib import Path
+from datetime import datetime
 
 from app.services.ingestion.extractor import TextExtractor, ExtractedContent
 from app.services.ingestion.table_extractor import TableExtractor, ExtractedTable
@@ -38,6 +39,9 @@ class ExtractionRunner:
         enable_deduplication: bool = True,
         extract_images: bool = True,
         extract_ocr: bool = False,
+        enable_text: bool = True,
+        enable_tables: bool = True,
+        enable_image_extraction: bool = True,
     ):
         """
         Initialize the extraction runner.
@@ -47,15 +51,21 @@ class ExtractionRunner:
             enable_deduplication: Whether to remove table text from extracted text
             extract_images: Whether to extract images (default: True)
             extract_ocr: Whether to extract OCR text from images (default: False)
+            enable_text: Whether to extract text (default: True)
+            enable_tables: Whether to extract tables (default: True)
+            enable_image_extraction: Whether to extract images (default: True)
         """
-        self.text_extractor = TextExtractor()
-        self.table_extractor = TableExtractor()
-        self.image_extractor = ImageExtractor(extract_ocr=extract_ocr) if extract_images else None
-        self.table_processor = TableProcessor()
-        self.table_deduplicator = TableDeduplicator() if enable_deduplication else None
+        self.text_extractor = TextExtractor() if enable_text else None
+        self.table_extractor = TableExtractor() if enable_tables else None
+        self.image_extractor = ImageExtractor(extract_ocr=extract_ocr) if (extract_images and enable_image_extraction) else None
+        self.table_processor = TableProcessor() if enable_tables else None
+        self.table_deduplicator = TableDeduplicator() if enable_deduplication and enable_tables else None
         self.max_workers = max_workers
         self.enable_deduplication = enable_deduplication
-        self.extract_images = extract_images
+        self.extract_images = extract_images and enable_image_extraction
+        self.enable_text = enable_text
+        self.enable_tables = enable_tables
+        self.enable_image_extraction = enable_image_extraction
     
     def extract_parallel_from_bytes(
         self,
@@ -88,21 +98,25 @@ class ExtractionRunner:
                 # Submit all extraction tasks
                 futures = {}
                 
-                text_future = executor.submit(
-                    self.text_extractor.extract_from_bytes,
-                    file_bytes=file_bytes,
-                    file_name=file_name,
-                    file_type=file_type,
-                )
-                futures[text_future] = "text"
+                text_future = None
+                if self.enable_text and self.text_extractor:
+                    text_future = executor.submit(
+                        self.text_extractor.extract_from_bytes,
+                        file_bytes=file_bytes,
+                        file_name=file_name,
+                        file_type=file_type,
+                    )
+                    futures[text_future] = "text"
                 
-                table_future = executor.submit(
-                    self.table_extractor.extract_from_bytes,
-                    file_bytes=file_bytes,
-                    file_name=file_name,
-                    file_type=file_type,
-                )
-                futures[table_future] = "table"
+                table_future = None
+                if self.enable_tables and self.table_extractor:
+                    table_future = executor.submit(
+                        self.table_extractor.extract_from_bytes,
+                        file_bytes=file_bytes,
+                        file_name=file_name,
+                        file_type=file_type,
+                    )
+                    futures[table_future] = "table"
                 
                 image_future = None
                 if self.extract_images and self.image_extractor:
@@ -159,10 +173,24 @@ class ExtractionRunner:
                             )
                             extracted_images = []
             
-            if extracted_content is None:
+            # Text extraction is required if enabled
+            if self.enable_text and extracted_content is None:
                 raise ExtractionError(
                     "Text extraction did not complete",
                     {"file_name": file_name},
+                )
+            
+            # If text extraction is disabled, create empty ExtractedContent
+            if not self.enable_text:
+                from app.services.ingestion.extractor import ExtractedContent
+                extracted_content = ExtractedContent(
+                    text="",
+                    file_name=file_name,
+                    file_type=file_type or "unknown",
+                    file_size=len(file_bytes),
+                    page_count=0,
+                    extracted_at=datetime.now(),
+                    metadata={},
                 )
             
             # Log table extraction results
@@ -211,7 +239,7 @@ class ExtractionRunner:
                     logger.info(
                         f"No table content found in extracted text (tables may be in image format)"
                     )
-            elif extracted_tables:
+            elif extracted_tables and self.enable_tables and self.table_processor:
                 # Tables extracted but deduplication disabled
                 processed_tables = [
                     self.table_processor.process_table(table) for table in extracted_tables

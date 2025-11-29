@@ -7,6 +7,8 @@
 
 .upload-section {
   margin-bottom: 2rem;
+  margin-top: 0;
+  padding-top: 0;
 }
 
 h1 {
@@ -22,6 +24,175 @@ h1 {
   margin-bottom: 2rem;
   font-size: 1.1rem;
   line-height: 1.7;
+}
+
+.processor-config-wrapper {
+  display: flex;
+  justify-content: center;
+  margin-bottom: 2rem;
+  width: 100%;
+}
+
+.processor-config {
+  background-color: #ffffff;
+  border: 2px solid #e5e5e5;
+  border-radius: 12px;
+  padding: 2rem 2.5rem;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
+  transition: border-color 0.2s, box-shadow 0.2s;
+  width: 100%;
+  max-width: 1200px;
+}
+
+.processor-config:hover {
+  border-color: #000000;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+}
+
+.processor-header {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  margin-bottom: 1.25rem;
+  padding-bottom: 1.25rem;
+  border-bottom: 1px solid #e5e5e5;
+}
+
+.processor-config h3 {
+  margin: 0 0 0.5rem 0;
+  font-size: 1.2rem;
+  color: #000000;
+  font-weight: 800;
+  letter-spacing: -0.01em;
+}
+
+.processor-description {
+  color: #666666;
+  margin: 0;
+  font-size: 0.9rem;
+  line-height: 1.6;
+  text-align: center;
+}
+
+.processor-options {
+  display: flex;
+  flex-direction: row;
+  justify-content: center;
+  align-items: center;
+  gap: 1.25rem;
+  flex-wrap: nowrap;
+  width: 100%;
+}
+
+.processor-option {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 0.75rem;
+  cursor: pointer;
+  padding: 1.25rem 1.5rem;
+  border: 2px solid #e5e5e5;
+  border-radius: 8px;
+  background-color: #fafafa;
+  transition: all 0.2s ease;
+  user-select: none;
+  position: relative;
+  flex: 1 1 0;
+  min-width: 0;
+  max-width: 100%;
+  overflow: hidden;
+}
+
+.processor-option:hover {
+  border-color: #000000;
+  background-color: #ffffff;
+  transform: translateY(-2px);
+  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.08);
+}
+
+.processor-option.active {
+  border-color: #000000;
+  background-color: #ffffff;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+}
+
+.processor-option.active::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 3px;
+  background-color: #000000;
+  border-radius: 8px 8px 0 0;
+}
+
+.processor-checkbox-wrapper {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-shrink: 0;
+}
+
+.processor-option input[type="checkbox"] {
+  width: 1.25rem;
+  height: 1.25rem;
+  cursor: pointer;
+  accent-color: #000000;
+  flex-shrink: 0;
+  margin: 0;
+}
+
+.processor-option input[type="checkbox"]:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
+.processor-label {
+  font-weight: 700;
+  color: #000000;
+  font-size: 1rem;
+  letter-spacing: -0.01em;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.processor-hint {
+  color: #666666;
+  font-size: 0.85rem;
+  font-weight: 400;
+  line-height: 1.4;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+@media (max-width: 768px) {
+  .processor-config {
+    padding: 1.25rem 1rem;
+  }
+
+  .processor-options {
+    flex-direction: column;
+    gap: 0.75rem;
+    align-items: stretch;
+  }
+
+  .processor-option {
+    width: 100%;
+    padding: 1rem;
+    justify-content: flex-start;
+  }
+
+  .processor-header {
+    text-align: center;
+  }
+
+  .processor-hint {
+    white-space: normal;
+  }
 }
 
 .upload-zone {

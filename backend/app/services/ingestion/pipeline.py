@@ -58,6 +58,9 @@ class IngestionPipeline:
         text_embedder: Optional[TextEmbedder] = None,
         image_embedder: Optional[ImageEmbedder] = None,
         vision_processor: Optional[Any] = None,
+        enable_text: bool = True,
+        enable_tables: bool = True,
+        enable_images: bool = True,
     ):
         """
         Initialize the ingestion pipeline.
@@ -68,11 +71,21 @@ class IngestionPipeline:
             text_embedder: Optional pre-initialized TextEmbedder instance (default: None, creates new)
             image_embedder: Optional pre-initialized ImageEmbedder instance (default: None, creates new)
             vision_processor: Optional pre-initialized VisionProcessor instance (default: None, creates new)
+            enable_text: Whether to process text (default: True)
+            enable_tables: Whether to process tables (default: True)
+            enable_images: Whether to process images (default: True)
         """
+        self.enable_text = enable_text
+        self.enable_tables = enable_tables
+        self.enable_images = enable_images
+        
         self.extractor = TextExtractor()  # Keep for backward compatibility
         self.extraction_runner = ExtractionRunner(
             enable_deduplication=True,
             extract_ocr=True,  # Enable OCR to extract text from chart images
+            enable_text=enable_text,
+            enable_tables=enable_tables,
+            enable_image_extraction=enable_images,
         )
         self.table_processor = TableProcessor()
         self.chunker = TextChunker(
@@ -175,38 +188,43 @@ class IngestionPipeline:
                 file_type=file_type,
             )
             logger.info(
-                f"✓ Extracted {len(extracted_content.text)} characters "
-                f"({extracted_content.page_count or 'N/A'} pages), "
+                f"✓ Extracted {len(extracted_content.text) if extracted_content else 0} characters "
+                f"({extracted_content.page_count if extracted_content else 'N/A'} pages), "
                 f"{len(extracted_tables)} table(s), "
                 f"{len(extracted_images)} image(s)"
             )
             
-            # Step 3: Chunk text
-            logger.info(f"Step 3: Chunking extracted text")
-            
-            # Prepare document metadata for chunks
+            # Step 3: Chunk text (only if text processing is enabled)
+            chunks = []
+            stats = {}
             chunk_metadata = {
                 "filename": filename,
                 "document_type": file_type,
                 "source": source,
                 "source_path": object_key,
-                "page_count": extracted_content.page_count,
-                "extracted_at": extracted_content.extracted_at.isoformat(),
+                "page_count": extracted_content.page_count if extracted_content else 0,
+                "extracted_at": extracted_content.extracted_at.isoformat() if extracted_content else datetime.utcnow().isoformat(),
                 **(extracted_content.metadata or {}),
                 **(document_metadata or {}),
             }
             
-            chunks = self.chunker.chunk_document(
-                text=extracted_content.text,
-                document_metadata=chunk_metadata,
-                preserve_structure=True,
-            )
-            
-            stats = self.chunker.get_chunk_statistics(chunks)
-            logger.info(
-                f"✓ Created {len(chunks)} chunks "
-                f"(avg: {stats['average_tokens']} tokens/chunk)"
-            )
+            if self.enable_text and extracted_content and extracted_content.text:
+                logger.info(f"Step 3: Chunking extracted text")
+                
+                chunks = self.chunker.chunk_document(
+                    text=extracted_content.text,
+                    document_metadata=chunk_metadata,
+                    preserve_structure=True,
+                )
+                
+                stats = self.chunker.get_chunk_statistics(chunks)
+                logger.info(
+                    f"✓ Created {len(chunks)} chunks "
+                    f"(avg: {stats['average_tokens']} tokens/chunk)"
+                )
+            else:
+                logger.info(f"Step 3: Skipping text chunking (text processing disabled or no text)")
+                stats = {"average_tokens": 0, "total_tokens": 0, "chunk_count": 0}
             
             # Step 4: Store document and chunks in Supabase
             logger.info(f"Step 4: Storing document and chunks in database")
@@ -215,14 +233,14 @@ class IngestionPipeline:
                 source_path=object_key,
                 filename=filename,
                 document_type=file_type,
-                extracted_text=extracted_content.text,
+                extracted_text=extracted_content.text if extracted_content else "",
                 metadata={
                     "source": source,
-                    "file_size": extracted_content.file_size,
-                    "page_count": extracted_content.page_count,
-                    "extracted_at": extracted_content.extracted_at.isoformat(),
+                    "file_size": extracted_content.file_size if extracted_content else len(file_bytes),
+                    "page_count": extracted_content.page_count if extracted_content else 0,
+                    "extracted_at": extracted_content.extracted_at.isoformat() if extracted_content else datetime.utcnow().isoformat(),
                     "chunking_stats": stats,
-                    **(extracted_content.metadata or {}),
+                    **(extracted_content.metadata if extracted_content else {}),
                     **(document_metadata or {}),
                 },
             )
@@ -234,10 +252,10 @@ class IngestionPipeline:
             )
             logger.info(f"✓ Created {len(chunk_ids)} chunk records")
             
-            # Step 4.5: Process and store tables
+            # Step 4.5: Process and store tables (only if table processing is enabled)
             table_chunk_ids = []
             processed_tables = []
-            if extracted_tables:
+            if extracted_tables and self.enable_tables:
                 logger.info(f"Step 4.5: Processing and storing {len(extracted_tables)} table(s)")
                 
                 # Process tables (convert to JSON, markdown, flattened text)
@@ -297,21 +315,25 @@ class IngestionPipeline:
                 )
                 logger.info(f"✓ Stored {len(table_ids)} table(s) in tables table")
             
-            # Step 5: Generate embeddings for text chunks
-            logger.info(f"Step 5: Generating embeddings for {len(chunks)} text chunks")
-            
-            # Extract chunk texts for embedding
-            chunk_texts = [chunk.text for chunk in chunks]
-            
-            # Generate embeddings in batch
-            text_embeddings = self.embedder.embed_batch(
-                texts=chunk_texts,
-                show_progress=True,
-            )
-            logger.info(
-                f"✓ Generated {len(text_embeddings)} text embeddings "
-                f"(dimension: {self.embedder.embedding_dim})"
-            )
+            # Step 5: Generate embeddings for text chunks (only if text processing is enabled)
+            text_embeddings = []
+            if self.enable_text and chunks:
+                logger.info(f"Step 5: Generating embeddings for {len(chunks)} text chunks")
+                
+                # Extract chunk texts for embedding
+                chunk_texts = [chunk.text for chunk in chunks]
+                
+                # Generate embeddings in batch
+                text_embeddings = self.embedder.embed_batch(
+                    texts=chunk_texts,
+                    show_progress=True,
+                )
+                logger.info(
+                    f"✓ Generated {len(text_embeddings)} text embeddings "
+                    f"(dimension: {self.embedder.embedding_dim})"
+                )
+            else:
+                logger.info(f"Step 5: Skipping text embeddings (text processing disabled or no chunks)")
             
             # Step 5.5: Generate embeddings for table chunks
             table_embeddings = []
@@ -331,34 +353,37 @@ class IngestionPipeline:
                     f"(dimension: {self.embedder.embedding_dim})"
                 )
             
-            # Step 6: Store text embeddings in Qdrant
-            logger.info(f"Step 6: Storing text embeddings in Qdrant")
-            
-            # Prepare payloads for Qdrant (metadata for each vector)
-            text_payloads = []
-            for chunk, chunk_id in zip(chunks, chunk_ids):
-                payload = {
-                    "chunk_id": str(chunk_id),
-                    "document_id": str(document_id),
-                    "text": chunk.text,
-                    "chunk_index": chunk.chunk_index,
-                    "chunk_type": chunk.chunk_type,
-                    "embedding_type": "text",
-                    "filename": filename,
-                    "document_type": file_type,
-                    "source": source,
-                    "source_path": object_key,
-                    **chunk.metadata,
-                }
-                text_payloads.append(payload)
-            
-            # Store text vectors in Qdrant
-            self.vector_repo.store_vectors(
-                chunk_ids=chunk_ids,
-                embeddings=text_embeddings,
-                payloads=text_payloads,
-            )
-            logger.info(f"✓ Stored {len(text_embeddings)} text embeddings in Qdrant")
+            # Step 6: Store text embeddings in Qdrant (only if text processing is enabled)
+            if self.enable_text and chunks and text_embeddings:
+                logger.info(f"Step 6: Storing text embeddings in Qdrant")
+                
+                # Prepare payloads for Qdrant (metadata for each vector)
+                text_payloads = []
+                for chunk, chunk_id in zip(chunks, chunk_ids):
+                    payload = {
+                        "chunk_id": str(chunk_id),
+                        "document_id": str(document_id),
+                        "text": chunk.text,
+                        "chunk_index": chunk.chunk_index,
+                        "chunk_type": chunk.chunk_type,
+                        "embedding_type": "text",
+                        "filename": filename,
+                        "document_type": file_type,
+                        "source": source,
+                        "source_path": object_key,
+                        **chunk.metadata,
+                    }
+                    text_payloads.append(payload)
+                
+                # Store text vectors in Qdrant
+                self.vector_repo.store_vectors(
+                    chunk_ids=chunk_ids,
+                    embeddings=text_embeddings,
+                    payloads=text_payloads,
+                )
+                logger.info(f"✓ Stored {len(text_embeddings)} text embeddings in Qdrant")
+            else:
+                logger.info(f"Step 6: Skipping text embedding storage (text processing disabled or no embeddings)")
             
             # Step 6.5: Store table embeddings in Qdrant (table_chunks collection)
             if processed_tables and table_embeddings:
@@ -392,13 +417,13 @@ class IngestionPipeline:
                 )
                 logger.info(f"✓ Stored {len(table_embeddings)} table embeddings in Qdrant (table_chunks)")
             
-            # Step 6.6: Process and store images
+            # Step 6.6: Process and store images (only if image processing is enabled)
             image_ids = []
             image_chunk_ids = []
             image_storage_paths = []  # Track storage paths for each image
             processed_extracted_images = []  # Track which images were successfully processed
             image_embeddings = []  # Initialize to empty list in case no images are extracted
-            if extracted_images:
+            if extracted_images and self.enable_images:
                 logger.info(f"Step 6.6: Processing {len(extracted_images)} image(s)")
                 
                 # Upload images to Supabase storage and store in database
@@ -551,32 +576,35 @@ class IngestionPipeline:
                     )
                     logger.info(f"✓ Stored {len(image_embeddings)} image embeddings in Qdrant (image_chunks)")
             
-            # Step 7: Index text chunks in Elasticsearch (BM25)
-            logger.info(f"Step 7: Indexing text chunks in Elasticsearch (BM25)")
-            
-            # Prepare data for BM25 indexing
-            chunk_texts = [chunk.text for chunk in chunks]
-            filenames = [filename] * len(chunks)
-            document_types = [file_type] * len(chunks)
-            source_paths = [object_key] * len(chunks)
-            created_at_list = [chunk.created_at for chunk in chunks]
-            
-            # Index text chunks in Elasticsearch
-            text_chunk_types = ["text"] * len(chunks)
-            text_embedding_types = ["text"] * len(chunks)
-            self.sparse_repo.index_chunks(
-                chunk_ids=chunk_ids,
-                chunk_texts=chunk_texts,
-                document_ids=[document_id] * len(chunks),
-                filenames=filenames,
-                document_types=document_types,
-                source_paths=source_paths,
-                metadata_list=[chunk.metadata for chunk in chunks],
-                created_at_list=created_at_list,
-                chunk_types=text_chunk_types,
-                embedding_types=text_embedding_types,
-            )
-            logger.info(f"✓ Indexed {len(chunks)} text chunks in Elasticsearch (BM25)")
+            # Step 7: Index text chunks in Elasticsearch (BM25) (only if text processing is enabled)
+            if self.enable_text and chunks:
+                logger.info(f"Step 7: Indexing text chunks in Elasticsearch (BM25)")
+                
+                # Prepare data for BM25 indexing
+                chunk_texts = [chunk.text for chunk in chunks]
+                filenames = [filename] * len(chunks)
+                document_types = [file_type] * len(chunks)
+                source_paths = [object_key] * len(chunks)
+                created_at_list = [chunk.created_at for chunk in chunks]
+                
+                # Index text chunks in Elasticsearch
+                text_chunk_types = ["text"] * len(chunks)
+                text_embedding_types = ["text"] * len(chunks)
+                self.sparse_repo.index_chunks(
+                    chunk_ids=chunk_ids,
+                    chunk_texts=chunk_texts,
+                    document_ids=[document_id] * len(chunks),
+                    filenames=filenames,
+                    document_types=document_types,
+                    source_paths=source_paths,
+                    metadata_list=[chunk.metadata for chunk in chunks],
+                    created_at_list=created_at_list,
+                    chunk_types=text_chunk_types,
+                    embedding_types=text_embedding_types,
+                )
+                logger.info(f"✓ Indexed {len(chunks)} text chunks in Elasticsearch (BM25)")
+            else:
+                logger.info(f"Step 7: Skipping text indexing (text processing disabled or no chunks)")
             
             # Step 7.5: Index table chunks in Elasticsearch (BM25)
             if processed_tables:
@@ -691,7 +719,7 @@ class IngestionPipeline:
         # Try to find surrounding text context from the same page
         # This helps provide context about what the chart shows
         context_text = ""
-        if extracted_image.page and extracted_content.text:
+        if extracted_image.page and extracted_content and extracted_content.text:
             # For PDFs, we can try to extract text around the image's page
             # This is a simple approach - in a more sophisticated system, we'd track
             # exact positions and extract nearby text

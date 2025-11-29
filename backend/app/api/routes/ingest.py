@@ -5,9 +5,9 @@ POST /api/v1/ingest - Upload and process documents
 """
 import traceback
 from pathlib import Path
-from fastapi import APIRouter, UploadFile, File, HTTPException, status, Request
+from fastapi import APIRouter, UploadFile, File, HTTPException, status, Request, Form
 from fastapi.responses import JSONResponse
-from typing import List
+from typing import List, Optional
 from datetime import datetime
 
 from app.api.schemas import IngestResponse, ErrorResponse
@@ -40,6 +40,9 @@ router = APIRouter(prefix="/ingest", tags=["ingestion"])
 async def ingest_document(
     http_request: Request,  # FastAPI will inject this automatically
     file: UploadFile = File(...),
+    enable_text: str = Form("true"),
+    enable_tables: str = Form("true"),
+    enable_images: str = Form("true"),
 ) -> IngestResponse:
     """
     Upload and extract text from a document.
@@ -113,6 +116,32 @@ async def ingest_document(
         # Execute complete ingestion pipeline
         logger.info("ingestion_pipeline_start", file_name=file_name, file_size_bytes=len(file_bytes))
         
+        # Log raw values received from form
+        logger.info(
+            "processor_configuration_raw",
+            enable_text_raw=enable_text,
+            enable_tables_raw=enable_tables,
+            enable_images_raw=enable_images,
+            enable_text_type=type(enable_text).__name__,
+            enable_tables_type=type(enable_tables).__name__,
+            enable_images_type=type(enable_images).__name__,
+        )
+        
+        # Convert form string values to proper booleans
+        # FormData sends strings, so we need to explicitly convert them
+        enable_text = enable_text.lower() in ('true', '1', 'yes', 'on') if isinstance(enable_text, str) else bool(enable_text)
+        enable_tables = enable_tables.lower() in ('true', '1', 'yes', 'on') if isinstance(enable_tables, str) else bool(enable_tables)
+        enable_images = enable_images.lower() in ('true', '1', 'yes', 'on') if isinstance(enable_images, str) else bool(enable_images)
+        
+        # Log processor configuration (after conversion)
+        logger.info(
+            "processor_configuration",
+            enable_text=enable_text,
+            enable_tables=enable_tables,
+            enable_images=enable_images,
+            file_name=file_name,
+        )
+        
         # Get pre-warmed services from app state (if available)
         # These are pre-initialized in the lifespan function to avoid model loading delays
         text_embedder = getattr(http_request.app.state, "text_embedder", None)
@@ -132,6 +161,9 @@ async def ingest_document(
             text_embedder=text_embedder,
             image_embedder=image_embedder,
             vision_processor=vision_processor,
+            enable_text=enable_text,
+            enable_tables=enable_tables,
+            enable_images=enable_images,
         )
         
         result = pipeline.ingest_document(
