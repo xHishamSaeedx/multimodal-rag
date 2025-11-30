@@ -10,6 +10,17 @@ from app.api.schemas import QueryRequest, QueryResponse, SourceInfo, ErrorRespon
 from app.services.retrieval import HybridRetriever, HybridRetrieverError
 from app.services.generation import AnswerGenerator, AnswerGeneratorError
 from app.utils.logging import get_logger
+from app.utils.metrics import (
+    queries_processed_total,
+    query_processing_duration_seconds,
+    retrieval_duration_seconds,
+    chunks_retrieved_total,
+    chunks_retrieved_per_query,
+    answer_generation_duration_seconds,
+    answer_generation_ttft_seconds,
+    answers_generated_total,
+    tokens_used_total,
+)
 
 logger = get_logger(__name__)
 
@@ -85,6 +96,7 @@ async def query(
             },
         )
     
+    query_start_time = time.time()
     try:
         logger.info(
             "query_processing_start",
@@ -127,6 +139,11 @@ async def query(
         retrieval_end_time = time.time()
         retrieval_duration = retrieval_end_time - retrieval_start_time
         
+        # Record retrieval metrics
+        retrieval_duration_seconds.labels(retrieval_type="hybrid").observe(retrieval_duration)
+        chunks_retrieved_total.labels(retrieval_type="hybrid").inc(len(retrieved_chunks))
+        chunks_retrieved_per_query.labels(retrieval_type="hybrid").observe(len(retrieved_chunks))
+        
         # Note: retrieval_duration includes embedding time, but logs will show them separately
         logger.info(
             "retrieval_completed",
@@ -136,6 +153,9 @@ async def query(
         
         if not retrieved_chunks:
             logger.warning("retrieval_empty", message="No chunks retrieved for query")
+            # Record metrics for empty retrieval
+            query_processing_duration_seconds.observe(time.time() - query_start_time)
+            queries_processed_total.labels(status="success").inc()
             return QueryResponse(
                 success=True,
                 query=query_text,
@@ -171,14 +191,37 @@ async def query(
         llm_end_time = time.time()
         llm_duration = llm_end_time - llm_start_time
         
+        # Record generation metrics
+        model_name = generation_result.get('model', 'unknown')
+        answer_generation_duration_seconds.labels(model=model_name).observe(llm_duration)
+        answers_generated_total.labels(model=model_name, status="success").inc()
+        
         ttft = generation_result.get('ttft', None)
+        if ttft is not None:
+            answer_generation_ttft_seconds.labels(model=model_name).observe(ttft)
+        
+        # Record token usage if available
+        tokens_info = generation_result.get('tokens_used')
+        if tokens_info:
+            if isinstance(tokens_info, dict):
+                input_tokens = tokens_info.get('input_tokens', 0)
+                output_tokens = tokens_info.get('output_tokens', 0)
+                total_tokens = tokens_info.get('total_tokens', input_tokens + output_tokens)
+                
+                if input_tokens > 0:
+                    tokens_used_total.labels(model=model_name, type="input").inc(input_tokens)
+                if output_tokens > 0:
+                    tokens_used_total.labels(model=model_name, type="output").inc(output_tokens)
+                if total_tokens > 0:
+                    tokens_used_total.labels(model=model_name, type="total").inc(total_tokens)
+        
         logger.info(
             "answer_generation_completed",
             answer_length=len(generation_result['answer']),
             sources_count=len(generation_result.get('sources', [])),
             llm_duration_seconds=round(llm_duration, 3),
             ttft_seconds=round(ttft, 3) if ttft is not None else None,
-            model=generation_result.get('model', 'unknown'),
+            model=model_name,
         )
         
         # Step 3: Format sources
@@ -199,6 +242,11 @@ async def query(
                 ))
         
         # Step 4: Build response
+        # Record total query processing duration
+        total_duration = time.time() - query_start_time
+        query_processing_duration_seconds.observe(total_duration)
+        queries_processed_total.labels(status="success").inc()
+        
         return QueryResponse(
             success=True,
             query=query_text,
@@ -215,6 +263,10 @@ async def query(
         )
     
     except HybridRetrieverError as e:
+        # Record error metrics
+        query_processing_duration_seconds.observe(time.time() - query_start_time)
+        queries_processed_total.labels(status="retrieval_error").inc()
+        
         logger.error(
             "query_retrieval_error",
             error_type="HybridRetrieverError",
@@ -233,6 +285,10 @@ async def query(
         )
     
     except AnswerGeneratorError as e:
+        # Record error metrics
+        query_processing_duration_seconds.observe(time.time() - query_start_time)
+        queries_processed_total.labels(status="generation_error").inc()
+        
         logger.error(
             "query_generation_error",
             error_type="AnswerGeneratorError",
@@ -251,6 +307,10 @@ async def query(
         )
     
     except Exception as e:
+        # Record error metrics
+        query_processing_duration_seconds.observe(time.time() - query_start_time)
+        queries_processed_total.labels(status="error").inc()
+        
         logger.error(
             "query_unexpected_error",
             error_type=type(e).__name__,

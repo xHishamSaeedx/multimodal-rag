@@ -2,12 +2,15 @@
 Health check endpoints.
 
 GET /api/v1/health - Health check for API and dependencies
+GET /metrics - Prometheus metrics endpoint
 """
-from fastapi import APIRouter
+from fastapi import APIRouter, Response
 from datetime import datetime
 from typing import Dict, Any
+from prometheus_client import generate_latest, CONTENT_TYPE_LATEST
 
 router = APIRouter(prefix="/health", tags=["health"])
+metrics_router = APIRouter(tags=["metrics"])
 
 
 @router.get("", response_model=Dict[str, Any])
@@ -50,3 +53,16 @@ async def liveness_check() -> Dict[str, Any]:
         "status": "alive",
         "timestamp": datetime.utcnow().isoformat()
     }
+
+
+@metrics_router.get("/metrics")
+async def metrics() -> Response:
+    """
+    Prometheus metrics endpoint.
+    
+    Returns metrics in Prometheus format for scraping.
+    """
+    return Response(
+        content=generate_latest(),
+        media_type=CONTENT_TYPE_LATEST
+    )

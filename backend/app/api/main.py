@@ -253,6 +253,10 @@ def create_app() -> FastAPI:
     # Include API routes
     app.include_router(api_router)
     
+    # Include metrics endpoint (at root level, not under /api/v1)
+    from app.api.routes.health import metrics_router
+    app.include_router(metrics_router)
+    
     @app.get("/")
     async def root():
         """Root endpoint."""

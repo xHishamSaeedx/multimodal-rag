@@ -81,7 +81,6 @@ class IngestionPipeline:
         
         self.extractor = TextExtractor()  # Keep for backward compatibility
         self.extraction_runner = ExtractionRunner(
-            enable_deduplication=True,
             extract_ocr=True,  # Enable OCR to extract text from chart images
             enable_text=enable_text,
             enable_tables=enable_tables,

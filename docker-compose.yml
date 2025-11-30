@@ -154,6 +154,40 @@ services:
       - rag-network
     restart: unless-stopped
 
+  # Prometheus - Metrics Collection
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: multimodal-rag-prometheus
+    ports:
+      - "9091:9090" # Prometheus UI (using 9091 externally to avoid conflict with MinIO console on 9090)
+    volumes:
+      - ./backend/observability/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml
+      - prometheus_data:/prometheus
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--storage.tsdb.retention.time=30d'
+      - '--web.console.libraries=/usr/share/prometheus/console_libraries'
+      - '--web.console.templates=/usr/share/prometheus/consoles'
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "wget",
+          "--no-verbose",
+          "--tries=1",
+          "--spider",
+          "http://localhost:9090/-/healthy",
+        ]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    networks:
+      - rag-network
+    restart: unless-stopped
+    labels:
+      - "logging=promtail"
+
   # Grafana - Visualization and Dashboards
   grafana:
     image: grafana/grafana:latest
@@ -186,6 +220,8 @@ services:
     depends_on:
       loki:
         condition: service_started
+      prometheus:
+        condition: service_started
     networks:
       - rag-network
     restart: unless-stopped
@@ -196,6 +232,7 @@ volumes:
   minio_data:
   loki_data:
   promtail_positions:
+  prometheus_data:
   grafana_data:
 
 networks:

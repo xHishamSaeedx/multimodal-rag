@@ -16,6 +16,13 @@ from app.services.retrieval.table_retriever import TableRetriever, TableRetrieve
 from app.services.retrieval.image_retriever import ImageRetriever, ImageRetrieverError
 from app.utils.exceptions import BaseAppException
 from app.utils.logging import get_logger
+from app.utils.metrics import (
+    retrieval_duration_seconds,
+    chunks_retrieved_total,
+    chunks_retrieved_per_query,
+    text_embedding_duration_seconds,
+    hybrid_merge_duration_seconds,
+)
 
 logger = get_logger(__name__)
 
@@ -143,6 +150,8 @@ class HybridRetriever:
                 query
             )
             embedding_time = time.time() - embedding_start
+            # Record embedding time metric
+            text_embedding_duration_seconds.observe(embedding_time)
             logger.debug(
                 "query_embedding_generated",
                 duration_seconds=round(embedding_time, 3),
@@ -180,6 +189,11 @@ class HybridRetriever:
                     text_count = sum(1 for r in results if r.get("chunk_type", "text") == "text")
                     table_count = sum(1 for r in results if r.get("chunk_type") == "table")
                     image_count = sum(1 for r in results if r.get("chunk_type") == "image")
+                    # Record sparse retrieval metrics
+                    retrieval_duration_seconds.labels(retrieval_type="sparse").observe(elapsed)
+                    chunks_retrieved_total.labels(retrieval_type="sparse").inc(len(results))
+                    if len(results) > 0:
+                        chunks_retrieved_per_query.labels(retrieval_type="sparse").observe(len(results))
                     logger.info(
                         "bm25_search_completed",
                         duration_seconds=round(elapsed, 3),
@@ -215,6 +229,11 @@ class HybridRetriever:
                     text_count = sum(1 for r in results if r.get("chunk_type", "text") == "text")
                     table_count = sum(1 for r in results if r.get("chunk_type") == "table")
                     image_count = sum(1 for r in results if r.get("chunk_type") == "image")
+                    # Record dense retrieval metrics
+                    retrieval_duration_seconds.labels(retrieval_type="dense").observe(elapsed)
+                    chunks_retrieved_total.labels(retrieval_type="dense").inc(len(results))
+                    if len(results) > 0:
+                        chunks_retrieved_per_query.labels(retrieval_type="dense").observe(len(results))
                     logger.info(
                         "vector_search_completed",
                         collection="text_chunks",
@@ -248,6 +267,11 @@ class HybridRetriever:
                         filter_conditions=filter_conditions,
                     )
                     elapsed = time.time() - start
+                    # Record table retrieval metrics
+                    retrieval_duration_seconds.labels(retrieval_type="table").observe(elapsed)
+                    chunks_retrieved_total.labels(retrieval_type="table").inc(len(results))
+                    if len(results) > 0:
+                        chunks_retrieved_per_query.labels(retrieval_type="table").observe(len(results))
                     logger.info(
                         "table_search_completed",
                         collection="table_chunks",
@@ -283,6 +307,11 @@ class HybridRetriever:
                         filter_conditions=filter_conditions,
                     )
                     elapsed = time.time() - start
+                    # Record image retrieval metrics
+                    retrieval_duration_seconds.labels(retrieval_type="image").observe(elapsed)
+                    chunks_retrieved_total.labels(retrieval_type="image").inc(len(results))
+                    if len(results) > 0:
+                        chunks_retrieved_per_query.labels(retrieval_type="image").observe(len(results))
                     logger.info(
                         "image_search_completed",
                         collection="image_chunks",
@@ -370,6 +399,8 @@ class HybridRetriever:
             merged_results.sort(key=lambda x: x.get("score", 0.0), reverse=True)
             final_results = merged_results[:limit]
             merge_time = time.time() - merge_start
+            # Record hybrid merge duration
+            hybrid_merge_duration_seconds.observe(merge_time)
             
             total_time = time.time() - total_start
             

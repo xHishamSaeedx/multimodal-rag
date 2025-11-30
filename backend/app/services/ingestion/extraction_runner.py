@@ -16,7 +16,6 @@ from app.services.ingestion.extractor import TextExtractor, ExtractedContent
 from app.services.ingestion.table_extractor import TableExtractor, ExtractedTable
 from app.services.ingestion.image_extractor import ImageExtractor, ExtractedImage
 from app.services.ingestion.table_processor import TableProcessor, ProcessedTable
-from app.services.ingestion.table_deduplicator import TableDeduplicator
 from app.utils.exceptions import ExtractionError
 
 logger = logging.getLogger(__name__)
@@ -36,7 +35,6 @@ class ExtractionRunner:
     def __init__(
         self,
         max_workers: int = 3,  # Increased to 3 for text, table, and image
-        enable_deduplication: bool = True,
         extract_images: bool = True,
         extract_ocr: bool = False,
         enable_text: bool = True,
@@ -48,7 +46,6 @@ class ExtractionRunner:
         
         Args:
             max_workers: Maximum number of worker threads for parallel extraction
-            enable_deduplication: Whether to remove table text from extracted text
             extract_images: Whether to extract images (default: True)
             extract_ocr: Whether to extract OCR text from images (default: False)
             enable_text: Whether to extract text (default: True)
@@ -59,9 +56,7 @@ class ExtractionRunner:
         self.table_extractor = TableExtractor() if enable_tables else None
         self.image_extractor = ImageExtractor(extract_ocr=extract_ocr) if (extract_images and enable_image_extraction) else None
         self.table_processor = TableProcessor() if enable_tables else None
-        self.table_deduplicator = TableDeduplicator() if enable_deduplication and enable_tables else None
         self.max_workers = max_workers
-        self.enable_deduplication = enable_deduplication
         self.extract_images = extract_images and enable_image_extraction
         self.enable_text = enable_text
         self.enable_tables = enable_tables
@@ -206,47 +201,12 @@ class ExtractionRunner:
             else:
                 logger.info(f"No tables found in {file_name}")
             
-            # Process tables and remove table text from extracted text
-            original_text_length = len(extracted_content.text)
+            # Process tables
             processed_tables = []
-            
-            if extracted_tables and self.enable_deduplication and self.table_deduplicator:
-                # Process tables
+            if extracted_tables and self.enable_tables and self.table_processor:
                 processed_tables = [
                     self.table_processor.process_table(table) for table in extracted_tables
                 ]
-                
-                # Remove table text from extracted text
-                cleaned_text = self.table_deduplicator.remove_table_text(
-                    extracted_content.text,
-                    processed_tables,
-                )
-                
-                removed_chars = original_text_length - len(cleaned_text)
-                
-                if removed_chars > 0:
-                    logger.info(
-                        f"✓ Removed {removed_chars} characters of table content from text "
-                        f"({removed_chars / original_text_length * 100:.1f}% of original text)"
-                    )
-                    logger.info(
-                        f"  Text length: {original_text_length} → {len(cleaned_text)} characters"
-                    )
-                    
-                    # Update extracted content with cleaned text
-                    extracted_content.text = cleaned_text
-                else:
-                    logger.info(
-                        f"No table content found in extracted text (tables may be in image format)"
-                    )
-            elif extracted_tables and self.enable_tables and self.table_processor:
-                # Tables extracted but deduplication disabled
-                processed_tables = [
-                    self.table_processor.process_table(table) for table in extracted_tables
-                ]
-                logger.info(
-                    f"Table deduplication disabled - table content may appear in text chunks"
-                )
             
             # Log image extraction results
             if extracted_images:
@@ -370,47 +330,12 @@ class ExtractionRunner:
             else:
                 logger.info(f"No tables found in {file_path.name}")
             
-            # Process tables and remove table text from extracted text
-            original_text_length = len(extracted_content.text)
+            # Process tables
             processed_tables = []
-            
-            if extracted_tables and self.enable_deduplication and self.table_deduplicator:
-                # Process tables
+            if extracted_tables and self.enable_tables and self.table_processor:
                 processed_tables = [
                     self.table_processor.process_table(table) for table in extracted_tables
                 ]
-                
-                # Remove table text from extracted text
-                cleaned_text = self.table_deduplicator.remove_table_text(
-                    extracted_content.text,
-                    processed_tables,
-                )
-                
-                removed_chars = original_text_length - len(cleaned_text)
-                
-                if removed_chars > 0:
-                    logger.info(
-                        f"✓ Removed {removed_chars} characters of table content from text "
-                        f"({removed_chars / original_text_length * 100:.1f}% of original text)"
-                    )
-                    logger.info(
-                        f"  Text length: {original_text_length} → {len(cleaned_text)} characters"
-                    )
-                    
-                    # Update extracted content with cleaned text
-                    extracted_content.text = cleaned_text
-                else:
-                    logger.info(
-                        f"No table content found in extracted text (tables may be in image format)"
-                    )
-            elif extracted_tables:
-                # Tables extracted but deduplication disabled
-                processed_tables = [
-                    self.table_processor.process_table(table) for table in extracted_tables
-                ]
-                logger.info(
-                    f"Table deduplication disabled - table content may appear in text chunks"
-                )
             
             # Note: extract_parallel_from_file doesn't extract images (file-based extraction)
             # Return empty list for images to maintain consistent return signature
@@ -513,47 +438,12 @@ class ExtractionRunner:
             else:
                 logger.info(f"No tables found in {file_name}")
             
-            # Process tables and remove table text from extracted text
-            original_text_length = len(extracted_content.text)
+            # Process tables
             processed_tables = []
-            
-            if extracted_tables and self.enable_deduplication and self.table_deduplicator:
-                # Process tables
+            if extracted_tables and self.enable_tables and self.table_processor:
                 processed_tables = [
                     self.table_processor.process_table(table) for table in extracted_tables
                 ]
-                
-                # Remove table text from extracted text
-                cleaned_text = self.table_deduplicator.remove_table_text(
-                    extracted_content.text,
-                    processed_tables,
-                )
-                
-                removed_chars = original_text_length - len(cleaned_text)
-                
-                if removed_chars > 0:
-                    logger.info(
-                        f"✓ Removed {removed_chars} characters of table content from text "
-                        f"({removed_chars / original_text_length * 100:.1f}% of original text)"
-                    )
-                    logger.info(
-                        f"  Text length: {original_text_length} → {len(cleaned_text)} characters"
-                    )
-                    
-                    # Update extracted content with cleaned text
-                    extracted_content.text = cleaned_text
-                else:
-                    logger.info(
-                        f"No table content found in extracted text (tables may be in image format)"
-                    )
-            elif extracted_tables:
-                # Tables extracted but deduplication disabled
-                processed_tables = [
-                    self.table_processor.process_table(table) for table in extracted_tables
-                ]
-                logger.info(
-                    f"Table deduplication disabled - table content may appear in text chunks"
-                )
             
             # Note: async method doesn't extract images yet
             # Return empty list for images to maintain consistent return signature
