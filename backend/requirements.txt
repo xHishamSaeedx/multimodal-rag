@@ -45,3 +45,5 @@ minio>=7.2.0  # S3-compatible storage client for MinIO
 # Utilities
 python-dotenv>=1.0.0
 structlog>=23.2.0  # Structured logging with JSON output
+
+neo4j>=5.15.0

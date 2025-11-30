@@ -54,6 +54,37 @@ services:
     labels:
       - "logging=promtail"
 
+  # Neo4j - Graph Database
+  neo4j:
+    image: neo4j:5.15.0
+    container_name: multimodal-rag-neo4j
+    environment:
+      - NEO4J_AUTH=neo4j/neo4jpassword
+      - NEO4J_PLUGINS=["apoc"]
+      - NEO4J_dbms_memory_heap_initial__size=512m
+      - NEO4J_dbms_memory_heap_max__size=2G
+      - NEO4J_dbms_memory_pagecache_size=1G
+      - NEO4J_dbms_security_procedures_unrestricted=apoc.*
+      - NEO4J_dbms_security_procedures_allowlist=apoc.*
+    ports:
+      - "7474:7474" # HTTP
+      - "7687:7687" # Bolt
+    volumes:
+      - neo4j_data:/data
+      - neo4j_logs:/logs
+      - neo4j_import:/var/lib/neo4j/import
+      - neo4j_plugins:/plugins
+    healthcheck:
+      test: ["CMD-SHELL", "cypher-shell -u neo4j -p neo4jpassword 'RETURN 1' || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+    networks:
+      - rag-network
+    restart: unless-stopped
+    labels:
+      - "logging=promtail"
+
   # Backend API - FastAPI Application
   # COMMENTED OUT: Running backend locally instead of in Docker
   # backend:
@@ -230,6 +261,10 @@ volumes:
   qdrant_data:
   elasticsearch_data:
   minio_data:
+  neo4j_data:
+  neo4j_logs:
+  neo4j_import:
+  neo4j_plugins:
   loki_data:
   promtail_positions:
   prometheus_data:

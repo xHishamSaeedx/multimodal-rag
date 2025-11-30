@@ -1,0 +1,18 @@
+# Graph POC Requirements
+# Minimal dependencies for testing the knowledge graph implementation
+
+# Neo4j driver
+neo4j>=5.15.0
+
+# PDF processing (for document ingestion)
+PyMuPDF>=1.23.0
+
+# Groq for answer generation
+groq>=0.4.0
+
+# Environment variable management
+python-dotenv>=1.0.0
+
+# Optional: For better text chunking (if needed)
+# langchain==0.3.27
+
