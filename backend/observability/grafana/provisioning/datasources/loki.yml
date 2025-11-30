@@ -14,15 +14,4 @@ datasources:
           matcherRegex: "traceID=(\\w+)"
           name: TraceID
           url: '$${__value.raw}'
-  
-  - name: Prometheus
-    type: prometheus
-    access: proxy
-    url: http://prometheus:9090
-    isDefault: true
-    editable: true
-    jsonData:
-      timeInterval: "15s"
-      httpMethod: "POST"
-    version: 1
 

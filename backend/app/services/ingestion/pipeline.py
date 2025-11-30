@@ -6,12 +6,21 @@ Raw Document → Extraction → Chunking → Storage → Indexing
 """
 
 import logging
+import time
 from pathlib import Path
 from typing import Optional, Dict, Any
 from uuid import UUID
 from datetime import datetime
 
 from app.services.ingestion.extractor import TextExtractor, ExtractedContent
+from app.utils.metrics import (
+    text_embedding_duration_seconds,
+    text_embeddings_generated_total,
+    text_embedding_batch_size,
+    image_embedding_duration_seconds,
+    image_embeddings_generated_total,
+    image_embedding_batch_size,
+)
 from app.services.ingestion.chunker import TextChunker, Chunk, ChunkingError
 from app.services.ingestion.extraction_runner import ExtractionRunner
 from app.services.ingestion.table_processor import TableProcessor, ProcessedTable
@@ -322,11 +331,19 @@ class IngestionPipeline:
                 # Extract chunk texts for embedding
                 chunk_texts = [chunk.text for chunk in chunks]
                 
-                # Generate embeddings in batch
+                # Generate embeddings in batch with metrics
+                embedding_start = time.time()
                 text_embeddings = self.embedder.embed_batch(
                     texts=chunk_texts,
                     show_progress=True,
                 )
+                embedding_duration = time.time() - embedding_start
+                
+                # Record text embedding metrics
+                text_embedding_duration_seconds.observe(embedding_duration)
+                text_embeddings_generated_total.inc(len(text_embeddings))
+                text_embedding_batch_size.observe(len(chunk_texts))
+                
                 logger.info(
                     f"✓ Generated {len(text_embeddings)} text embeddings "
                     f"(dimension: {self.embedder.embedding_dim})"
@@ -342,11 +359,19 @@ class IngestionPipeline:
                 # Extract flattened table texts for embedding
                 table_texts = [processed_table.table_text for processed_table in processed_tables]
                 
-                # Generate embeddings in batch (same model as text)
+                # Generate embeddings in batch (same model as text) with metrics
+                embedding_start = time.time()
                 table_embeddings = self.embedder.embed_batch(
                     texts=table_texts,
                     show_progress=True,
                 )
+                embedding_duration = time.time() - embedding_start
+                
+                # Record text embedding metrics (tables use same text embedding model)
+                text_embedding_duration_seconds.observe(embedding_duration)
+                text_embeddings_generated_total.inc(len(table_embeddings))
+                text_embedding_batch_size.observe(len(table_texts))
+                
                 logger.info(
                     f"✓ Generated {len(table_embeddings)} table embeddings "
                     f"(dimension: {self.embedder.embedding_dim})"
@@ -525,11 +550,18 @@ class IngestionPipeline:
                     # Extract image bytes for embedding (only successfully processed ones)
                     image_bytes_list = [img.image_bytes for img in processed_extracted_images]
                     
-                    # Generate embeddings in batch
+                    # Generate embeddings in batch with metrics
+                    embedding_start = time.time()
                     image_embeddings = self.image_embedder.embed_batch(
                         image_bytes_list=image_bytes_list,
                         show_progress=True,
                     )
+                    embedding_duration = time.time() - embedding_start
+                    
+                    # Record image embedding metrics
+                    image_embedding_duration_seconds.observe(embedding_duration)
+                    image_embeddings_generated_total.inc(len(image_embeddings))
+                    image_embedding_batch_size.observe(len(image_bytes_list))
                     
                     logger.info(
                         f"✓ Generated {len(image_embeddings)} image embeddings "

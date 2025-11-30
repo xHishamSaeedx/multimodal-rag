@@ -3,6 +3,7 @@ Document ingestion endpoint.
 
 POST /api/v1/ingest - Upload and process documents
 """
+import time
 from fastapi import APIRouter, UploadFile, File, HTTPException, status, Request, Form
 from typing import List, Optional
 from datetime import datetime
@@ -18,6 +19,13 @@ from app.utils.exceptions import (
     StorageError,
 )
 from app.utils.logging import get_logger
+from app.utils.metrics import (
+    documents_ingested_total,
+    document_ingestion_duration_seconds,
+    chunks_created_total,
+    chunks_created_per_document,
+    document_processing_errors_total,
+)
 
 logger = get_logger(__name__)
 
@@ -70,6 +78,10 @@ async def ingest_document(
                 "details": {},
             },
         )
+    
+    # Start timer for ingestion duration
+    ingestion_start_time = time.time()
+    file_type = "unknown"  # Will be set after extraction
     
     try:
         # Initialize extractor
@@ -170,12 +182,25 @@ async def ingest_document(
         )
         
         extracted_content = result["extracted_content"]
+        file_type = extracted_content.file_type or "unknown"
+        
+        # Calculate ingestion duration
+        ingestion_duration = time.time() - ingestion_start_time
+        
+        # Record ingestion metrics
+        documents_ingested_total.labels(file_type=file_type, status="success").inc()
+        document_ingestion_duration_seconds.labels(file_type=file_type).observe(ingestion_duration)
+        
+        # Record chunks created metrics
+        chunks_count = result["chunks_count"]
+        chunks_created_total.labels(document_type=file_type).inc(chunks_count)
+        chunks_created_per_document.labels(file_type=file_type).observe(chunks_count)
         
         logger.info(
             "ingestion_completed",
             file_name=file_name,
             document_id=result["document_id"],
-            chunks_count=result["chunks_count"],
+            chunks_count=chunks_count,
             extracted_text_length=len(extracted_content.text),
             page_count=extracted_content.page_count,
         )
@@ -200,10 +225,17 @@ async def ingest_document(
         )
     
     except HTTPException:
+        # Record error metrics
+        file_type = file_name.split('.')[-1] if '.' in file_name else "unknown"
+        documents_ingested_total.labels(file_type=file_type, status="failure").inc()
+        document_processing_errors_total.labels(error_type="HTTPException", file_type=file_type).inc()
         # Re-raise HTTPException as-is
         raise
     
     except UnsupportedFileTypeError as e:
+        file_type = file_name.split('.')[-1] if '.' in file_name else "unknown"
+        documents_ingested_total.labels(file_type=file_type, status="failure").inc()
+        document_processing_errors_total.labels(error_type="UnsupportedFileTypeError", file_type=file_type).inc()
         logger.error(
             "ingestion_error",
             error_type="UnsupportedFileTypeError",
@@ -222,6 +254,9 @@ async def ingest_document(
         )
     
     except FileReadError as e:
+        file_type = file_name.split('.')[-1] if '.' in file_name else "unknown"
+        documents_ingested_total.labels(file_type=file_type, status="failure").inc()
+        document_processing_errors_total.labels(error_type="FileReadError", file_type=file_type).inc()
         logger.error(
             "ingestion_error",
             error_type="FileReadError",
@@ -240,6 +275,9 @@ async def ingest_document(
         )
     
     except IngestionPipelineError as e:
+        file_type = file_name.split('.')[-1] if '.' in file_name else "unknown"
+        documents_ingested_total.labels(file_type=file_type, status="failure").inc()
+        document_processing_errors_total.labels(error_type="IngestionPipelineError", file_type=file_type).inc()
         logger.error(
             "ingestion_error",
             error_type="IngestionPipelineError",
@@ -257,6 +295,9 @@ async def ingest_document(
         )
     
     except StorageError as e:
+        file_type = file_name.split('.')[-1] if '.' in file_name else "unknown"
+        documents_ingested_total.labels(file_type=file_type, status="failure").inc()
+        document_processing_errors_total.labels(error_type="StorageError", file_type=file_type).inc()
         logger.error(
             "ingestion_error",
             error_type="StorageError",
@@ -275,6 +316,9 @@ async def ingest_document(
         )
     
     except ExtractionError as e:
+        file_type = file_name.split('.')[-1] if '.' in file_name else "unknown"
+        documents_ingested_total.labels(file_type=file_type, status="failure").inc()
+        document_processing_errors_total.labels(error_type="ExtractionError", file_type=file_type).inc()
         logger.error(
             "ingestion_error",
             error_type="ExtractionError",
@@ -293,6 +337,9 @@ async def ingest_document(
         )
     
     except Exception as e:
+        file_type = file_name.split('.')[-1] if '.' in file_name else "unknown" if 'file_name' in locals() else "unknown"
+        documents_ingested_total.labels(file_type=file_type, status="failure").inc()
+        document_processing_errors_total.labels(error_type=type(e).__name__, file_type=file_type).inc()
         logger.error(
             "ingestion_unexpected_error",
             error_type=type(e).__name__,

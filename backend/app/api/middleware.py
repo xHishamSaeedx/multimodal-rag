@@ -14,6 +14,12 @@ from app.utils.logging import (
     set_correlation_id,
     generate_correlation_id,
 )
+from app.utils.metrics import (
+    http_requests_total,
+    http_request_duration_seconds,
+    http_request_size_bytes,
+    http_response_size_bytes,
+)
 
 logger = get_logger(__name__)
 
@@ -35,6 +41,17 @@ class CorrelationIDMiddleware(BaseHTTPMiddleware):
         
         # Log request start
         start_time = time.time()
+        request_body_size = 0
+        
+        # Get request body size if available
+        if request.method in ["POST", "PUT", "PATCH"]:
+            content_length = request.headers.get("content-length")
+            if content_length:
+                try:
+                    request_body_size = int(content_length)
+                except ValueError:
+                    request_body_size = 0
+        
         logger.info(
             "request_started",
             method=request.method,
@@ -50,6 +67,20 @@ class CorrelationIDMiddleware(BaseHTTPMiddleware):
             
             # Calculate duration
             duration = time.time() - start_time
+            
+            # Get endpoint path (normalize)
+            endpoint = request.url.path
+            method = request.method
+            status_code = response.status_code
+            
+            # Record HTTP metrics
+            http_requests_total.labels(method=method, endpoint=endpoint, status_code=status_code).inc()
+            http_request_duration_seconds.labels(method=method, endpoint=endpoint).observe(duration)
+            http_request_size_bytes.labels(method=method, endpoint=endpoint).observe(request_body_size)
+            
+            # Get response body size
+            response_body_size = int(response.headers.get("content-length", 0))
+            http_response_size_bytes.labels(method=method, endpoint=endpoint).observe(response_body_size)
             
             # Add correlation ID to response headers
             response.headers["X-Correlation-ID"] = correlation_id
@@ -68,6 +99,14 @@ class CorrelationIDMiddleware(BaseHTTPMiddleware):
         except Exception as e:
             # Calculate duration even on error
             duration = time.time() - start_time
+            
+            # Record error metrics
+            endpoint = request.url.path
+            method = request.method
+            status_code = 500  # Assume 500 for unhandled exceptions
+            http_requests_total.labels(method=method, endpoint=endpoint, status_code=status_code).inc()
+            http_request_duration_seconds.labels(method=method, endpoint=endpoint).observe(duration)
+            http_request_size_bytes.labels(method=method, endpoint=endpoint).observe(request_body_size)
             
             # Log request error
             logger.error(
