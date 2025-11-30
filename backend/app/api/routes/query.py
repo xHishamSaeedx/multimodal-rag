@@ -85,8 +85,9 @@ async def query(
     enable_dense = request.enable_dense if request.enable_dense is not None else True
     enable_table = request.enable_table if request.enable_table is not None else True
     enable_image = request.enable_image if request.enable_image is not None else True
+    enable_graph = request.enable_graph if request.enable_graph is not None else True
     
-    if not (enable_sparse or enable_dense or enable_table or enable_image):
+    if not (enable_sparse or enable_dense or enable_table or enable_image or enable_graph):
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail={
@@ -135,6 +136,7 @@ async def query(
             enable_dense=enable_dense,
             enable_table=enable_table,
             enable_image=enable_image,
+            enable_graph=enable_graph,
         )
         retrieval_end_time = time.time()
         retrieval_duration = retrieval_end_time - retrieval_start_time

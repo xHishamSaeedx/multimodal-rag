@@ -39,6 +39,9 @@ timm>=0.9.0  # SigLIP image embeddings (optional, alternative to CLIP)
 # Text processing
 langchain==0.3.27  # Text chunking utilities
 
+# NLP / Named Entity Recognition
+spacy>=3.5.0  # NER for entity extraction
+
 # Storage
 minio>=7.2.0  # S3-compatible storage client for MinIO
 

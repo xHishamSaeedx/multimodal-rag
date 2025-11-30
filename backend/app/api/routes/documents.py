@@ -21,6 +21,8 @@ from app.services.storage import MinIOStorage
 from app.repositories.document_repository import DocumentRepository, RepositoryError
 from app.repositories.vector_repository import VectorRepository, VectorRepositoryError
 from app.repositories.sparse_repository import SparseRepository, SparseRepositoryError
+from app.repositories.graph_repository import GraphRepository
+from app.core.config import settings
 from app.utils.exceptions import StorageError
 from app.utils.logging import get_logger
 
@@ -258,7 +260,8 @@ async def delete_document(
     2. Deletes chunks from Elasticsearch (BM25 index, includes text, table, and image chunks)
     3. Deletes images from Supabase Storage (document-images bucket)
     4. Deletes document, chunks, tables, and images from Supabase database
-    5. Deletes file from MinIO (data lake)
+    5. Deletes document graph from Neo4j (knowledge graph) - all related nodes and relationships
+    6. Deletes file from MinIO (data lake)
     
     Args:
         object_key: Object key (path) of the document to delete
@@ -366,8 +369,19 @@ async def delete_document(
             except Exception as e:
                 deletion_errors.append(f"Supabase: {str(e)}")
                 logger.error(f"Unexpected error deleting from Supabase: {str(e)}", exc_info=True)
+            
+            # 5. Delete from Neo4j (knowledge graph) if enabled
+            if settings.neo4j_enabled:
+                try:
+                    graph_repo = GraphRepository()
+                    graph_repo.delete_document_graph(str(document.id))
+                    deletion_success.append("Neo4j knowledge graph")
+                    logger.info(f"Deleted document graph from Neo4j: {document.id}")
+                except Exception as e:
+                    deletion_errors.append(f"Neo4j: {str(e)}")
+                    logger.error(f"Failed to delete from Neo4j: {str(e)}", exc_info=True)
         
-        # 5. Delete from MinIO (data lake)
+        # 6. Delete from MinIO (data lake)
         if document_exists_in_storage:
             try:
                 storage.delete_document(object_key)

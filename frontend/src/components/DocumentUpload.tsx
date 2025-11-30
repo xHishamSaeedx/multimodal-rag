@@ -17,24 +17,44 @@ const DocumentUpload: React.FC = () => {
   const [enableText, setEnableText] = useState(true);
   const [enableTables, setEnableTables] = useState(true);
   const [enableImages, setEnableImages] = useState(true);
+  const [enableGraph, setEnableGraph] = useState(true);
   
   // Refs to always get the latest state values (avoid stale closures)
   const enableTextRef = useRef(enableText);
   const enableTablesRef = useRef(enableTables);
   const enableImagesRef = useRef(enableImages);
+  const enableGraphRef = useRef(enableGraph);
   
   // Keep refs in sync with state
   useEffect(() => {
     enableTextRef.current = enableText;
+    console.log('enableText state changed to:', enableText);
   }, [enableText]);
   
   useEffect(() => {
     enableTablesRef.current = enableTables;
+    console.log('enableTables state changed to:', enableTables);
   }, [enableTables]);
   
   useEffect(() => {
     enableImagesRef.current = enableImages;
+    console.log('enableImages state changed to:', enableImages);
   }, [enableImages]);
+  
+  useEffect(() => {
+    enableGraphRef.current = enableGraph;
+    console.log('enableGraph state changed to:', enableGraph);
+  }, [enableGraph]);
+  
+  // Log initial state on mount
+  useEffect(() => {
+    console.log('DocumentUpload mounted with initial state:', {
+      enableText,
+      enableTables,
+      enableImages,
+      enableGraph,
+    });
+  }, []); // Run once on mount
 
   const supportedTypes = ['.pdf', '.docx', '.txt', '.md', '.markdown'];
   const maxFileSize = 50 * 1024 * 1024; // 50MB
@@ -63,19 +83,48 @@ const DocumentUpload: React.FC = () => {
     const currentEnableText = enableTextRef.current;
     const currentEnableTables = enableTablesRef.current;
     const currentEnableImages = enableImagesRef.current;
+    const currentEnableGraph = enableGraphRef.current;
 
-    // Debug: Log current state values
-    console.log('Upload file - Current state:', { 
+    // Debug: Log current state values from refs (latest values)
+    console.log('DocumentUpload.uploadFile - Reading values from refs:', { 
       enableText: currentEnableText, 
       enableTables: currentEnableTables, 
-      enableImages: currentEnableImages 
+      enableImages: currentEnableImages,
+      enableGraph: currentEnableGraph
+    });
+    
+    // Also log actual state values for comparison
+    console.log('DocumentUpload.uploadFile - Actual state values:', {
+      enableText,
+      enableTables,
+      enableImages,
+      enableGraph,
     });
 
+    // Safety check: If all processors are disabled, at least enable text processing
+    // (This prevents accidentally uploading with no content extraction)
+    let finalEnableText = currentEnableText;
+    let finalEnableTables = currentEnableTables;
+    let finalEnableImages = currentEnableImages;
+    
+    if (!currentEnableText && !currentEnableTables && !currentEnableImages) {
+      console.warn('All processors disabled! Auto-enabling text processing for basic functionality.');
+      finalEnableText = true;
+    }
+
     try {
+      console.log('DocumentUpload.uploadFile - Calling api.uploadDocument with:', {
+        enableText: finalEnableText,
+        enableTables: finalEnableTables,
+        enableImages: finalEnableImages,
+        enableGraph: currentEnableGraph,
+      });
+      
       const result = await api.uploadDocument(file, {
-        enableText: currentEnableText,
-        enableTables: currentEnableTables,
-        enableImages: currentEnableImages,
+        enableText: finalEnableText,
+        enableTables: finalEnableTables,
+        enableImages: finalEnableImages,
+        enableGraph: currentEnableGraph,
       });
       return { ...result, file };
     } catch (err: any) {
@@ -187,8 +236,34 @@ const DocumentUpload: React.FC = () => {
           <div className="processor-header">
             <h3>Document Processors</h3>
             <p className="processor-description">
-              Select which content types to process from your documents
+              Select which content types to process from your documents. Knowledge Graph builds relationships between extracted content.
             </p>
+            {!enableText && !enableTables && !enableImages && (
+              <div style={{
+                marginTop: '10px',
+                padding: '10px',
+                backgroundColor: enableGraph ? '#fff3cd' : '#f8d7da',
+                border: `1px solid ${enableGraph ? '#ffc107' : '#dc3545'}`,
+                borderRadius: '4px',
+                color: enableGraph ? '#856404' : '#721c24'
+              }}>
+                <strong>⚠️ {enableGraph ? 'Warning' : 'Error'}:</strong>{' '}
+                All content processors (Text, Tables, Images) are disabled. 
+                No content will be extracted or indexed.
+                {enableGraph && (
+                  <div style={{ marginTop: '8px', paddingTop: '8px', borderTop: '1px solid #ffc107' }}>
+                    <strong>⚠️ Important:</strong> Knowledge Graph is currently <strong>enabled</strong>, but it 
+                    <strong> requires at least one content processor</strong> (Text, Tables, or Images) to extract 
+                    content before it can build relationships. Please enable at least one content processor above.
+                  </div>
+                )}
+                {!enableGraph && (
+                  <div style={{ marginTop: '8px' }}>
+                    <strong>Tip:</strong> Enable at least one content processor (Text, Tables, or Images) to extract content from your documents.
+                  </div>
+                )}
+              </div>
+            )}
           </div>
           <div className="processor-options">
             <label className={`processor-option ${enableText ? 'active' : ''}`}>
@@ -235,6 +310,21 @@ const DocumentUpload: React.FC = () => {
                 <span className="processor-label">Images</span>
               </div>
               <span className="processor-hint">Extract and process images with captions</span>
+            </label>
+            <label className={`processor-option ${enableGraph ? 'active' : ''}`}>
+              <div className="processor-checkbox-wrapper">
+                <input
+                  type="checkbox"
+                  checked={enableGraph}
+                  onChange={(e) => {
+                    console.log('Knowledge Graph checkbox changed:', e.target.checked);
+                    setEnableGraph(e.target.checked);
+                  }}
+                  disabled={isUploading}
+                />
+                <span className="processor-label">Knowledge Graph</span>
+              </div>
+              <span className="processor-hint">Build knowledge graph structure for enhanced retrieval</span>
             </label>
           </div>
         </div>

@@ -71,6 +71,7 @@ class QueryRequest(BaseModel):
     enable_dense: Optional[bool] = True  # Whether to use dense text retriever
     enable_table: Optional[bool] = True  # Whether to use table retriever
     enable_image: Optional[bool] = True  # Whether to use image retriever
+    enable_graph: Optional[bool] = True  # Whether to use knowledge graph retriever
 
 
 class SourceInfo(BaseModel):

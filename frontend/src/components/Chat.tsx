@@ -36,6 +36,7 @@ const Chat: React.FC = () => {
   const [enableDense, setEnableDense] = useState(true);
   const [enableTable, setEnableTable] = useState(true);
   const [enableImage, setEnableImage] = useState(true);
+  const [enableGraph, setEnableGraph] = useState(true);
 
 
   useEffect(() => {
@@ -229,7 +230,7 @@ const Chat: React.FC = () => {
     if (!input.trim() || isLoading) return;
     
     // Ensure at least one retriever is enabled
-    if (!enableSparse && !enableDense && !enableTable && !enableImage) {
+    if (!enableSparse && !enableDense && !enableTable && !enableImage && !enableGraph) {
       setError('Please select at least one retriever to use.');
       return;
     }
@@ -267,6 +268,7 @@ const Chat: React.FC = () => {
         enable_dense: enableDense,
         enable_table: enableTable,
         enable_image: enableImage,
+        enable_graph: enableGraph,
       });
 
       // Update assistant message with actual response
@@ -394,6 +396,18 @@ const Chat: React.FC = () => {
                 <span className="processor-label">Images</span>
               </div>
               <span className="processor-hint">Dense vector search for images</span>
+            </label>
+            <label className={`processor-option ${enableGraph ? 'active' : ''}`}>
+              <div className="processor-checkbox-wrapper">
+                <input
+                  type="checkbox"
+                  checked={enableGraph}
+                  onChange={(e) => setEnableGraph(e.target.checked)}
+                  disabled={isLoading}
+                />
+                <span className="processor-label">Knowledge Graph</span>
+              </div>
+              <span className="processor-hint">Graph-based retrieval using entity relationships</span>
             </label>
           </div>
         </div>

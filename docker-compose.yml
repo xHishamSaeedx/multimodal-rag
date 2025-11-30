@@ -69,6 +69,7 @@ services:
     ports:
       - "7474:7474" # HTTP
       - "7687:7687" # Bolt
+      - "2004:2004" # Prometheus metrics
     volumes:
       - neo4j_data:/data
       - neo4j_logs:/logs

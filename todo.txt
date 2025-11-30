@@ -1,0 +1,50 @@
+Great question! Let me compare what `chatgpt_response.txt` recommends vs. what we implemented:
+
+## ✅ What's Working (Aligned with the Design)
+
+| Recommendation | Our Implementation | Status |
+|----------------|-------------------|--------|
+| **Document → Chunk** nodes | `HAS_CHUNK` relationship | ✅ |
+| **Chunk → Entity** nodes | `MENTIONS` relationship | ✅ |
+| **CHUNK_NEXT → CHUNK** | `NEXT_CHUNK` relationship | ✅ |
+| **Chunk-level granularity** | Yes, not per-sentence | ✅ |
+| **Metadata on nodes** | doc_id, source, etc. | ✅ |
+| **No manual doc selection** | Automatic retrieval | ✅ |
+| **Cross-document entity linking** | `normalized_name` property | ✅ |
+
+## ⚠️ What Could Be Better
+
+| Recommendation | Current State | Gap |
+|----------------|---------------|-----|
+| **Entity → Entity** relations | Not implemented | Missing `RELATES_TO` edges between entities |
+| **Topic/Ontology nodes** | We have Sections, not Topics | No global thematic layer across docs |
+| **Graph traversal (hopping)** | Limited - mostly content search | Not fully utilizing edge traversal |
+
+## 🔍 Evidence from Your Logs
+
+The log showed:
+```
+methods: {'content_search': 20}
+```
+
+This means the graph retriever used **content keyword search** (tier 3), not:
+- ❌ Section-title matching (tier 1)
+- ❌ Entity matching (tier 2)
+
+**Why?** Likely because:
+1. "Equifax" wasn't extracted as an entity during ingestion, OR
+2. The entity exists but the matching query didn't trigger it
+
+## 🎯 Verdict
+
+**The graph IS working**, but it's functioning more like an **enhanced keyword search** rather than a true **graph traversal system** as described in the ChatGPT response.
+
+### To fully align with the design, you'd need:
+
+1. **Better entity extraction** - Verify spaCy is extracting "Equifax" as an ORG entity
+2. **Graph hopping** - When you find a chunk mentioning "Equifax", follow edges to other chunks/entities connected to it
+3. **Topic layer** - Add abstract topic nodes (e.g., "data breach", "privacy", "ethics") that connect across documents
+
+### Quick Diagnostic
+
+Want me to check if entities are being extracted properly? I can look at the ingestion pipeline or add a diagnostic query to see what entities exist in your graph for the Equifax document.

@@ -180,6 +180,101 @@ image_embedding_batch_size = Histogram(
 )
 
 # ============================================================================
+# Neo4j (Knowledge Graph) Metrics
+# ============================================================================
+
+# Neo4j connection metrics
+neo4j_connection_errors_total = Counter(
+    'neo4j_connection_errors_total',
+    'Total number of Neo4j connection errors'
+)
+
+neo4j_connection_duration_seconds = Histogram(
+    'neo4j_connection_duration_seconds',
+    'Neo4j connection establishment duration in seconds',
+    buckets=[0.001, 0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1.0]
+)
+
+# Neo4j query metrics
+neo4j_query_duration_seconds = Histogram(
+    'neo4j_query_duration_seconds',
+    'Neo4j query duration in seconds',
+    ['operation'],  # 'create', 'read', 'update', 'delete', 'match', etc.
+    buckets=[0.001, 0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1.0, 2.5, 5.0]
+)
+
+neo4j_queries_total = Counter(
+    'neo4j_queries_total',
+    'Total number of Neo4j queries',
+    ['operation', 'status']  # status: 'success', 'error'
+)
+
+# Neo4j graph building metrics
+neo4j_nodes_created_total = Counter(
+    'neo4j_nodes_created_total',
+    'Total number of nodes created in Neo4j',
+    ['node_type']  # 'Document', 'Section', 'Chunk', 'Entity', 'Media'
+)
+
+neo4j_relationships_created_total = Counter(
+    'neo4j_relationships_created_total',
+    'Total number of relationships created in Neo4j',
+    ['relationship_type']  # 'HAS_SECTION', 'HAS_CHUNK', 'MENTIONS', etc.
+)
+
+neo4j_graph_build_duration_seconds = Histogram(
+    'neo4j_graph_build_duration_seconds',
+    'Neo4j graph building duration in seconds',
+    ['document_type'],
+    buckets=[0.1, 0.5, 1.0, 2.0, 5.0, 10.0, 30.0, 60.0, 120.0]
+)
+
+neo4j_graph_builds_total = Counter(
+    'neo4j_graph_builds_total',
+    'Total number of graph builds',
+    ['status']  # 'success', 'error'
+)
+
+# Neo4j graph query metrics
+neo4j_graph_queries_total = Counter(
+    'neo4j_graph_queries_total',
+    'Total number of graph-based queries',
+    ['query_type']  # 'by_entity', 'by_keywords', 'by_document', 'related_chunks'
+)
+
+neo4j_graph_query_duration_seconds = Histogram(
+    'neo4j_graph_query_duration_seconds',
+    'Graph query duration in seconds',
+    ['query_type'],
+    buckets=[0.001, 0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1.0, 2.5]
+)
+
+neo4j_chunks_retrieved_via_graph = Counter(
+    'neo4j_chunks_retrieved_via_graph',
+    'Total number of chunks retrieved via graph queries',
+    ['query_type']
+)
+
+# Neo4j active connections gauge
+neo4j_active_connections = Gauge(
+    'neo4j_active_connections',
+    'Number of active Neo4j connections'
+)
+
+# Neo4j transaction metrics
+neo4j_transactions_total = Counter(
+    'neo4j_transactions_total',
+    'Total number of Neo4j transactions',
+    ['status']  # 'success', 'error', 'rollback'
+)
+
+neo4j_transaction_duration_seconds = Histogram(
+    'neo4j_transaction_duration_seconds',
+    'Neo4j transaction duration in seconds',
+    buckets=[0.001, 0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1.0, 2.5, 5.0]
+)
+
+# ============================================================================
 # Storage Metrics
 # ============================================================================
 

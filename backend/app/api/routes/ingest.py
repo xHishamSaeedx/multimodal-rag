@@ -138,9 +138,35 @@ async def ingest_document(
         
         # Convert form string values to proper booleans
         # FormData sends strings, so we need to explicitly convert them
-        enable_text = enable_text.lower() in ('true', '1', 'yes', 'on') if isinstance(enable_text, str) else bool(enable_text)
-        enable_tables = enable_tables.lower() in ('true', '1', 'yes', 'on') if isinstance(enable_tables, str) else bool(enable_tables)
-        enable_images = enable_images.lower() in ('true', '1', 'yes', 'on') if isinstance(enable_images, str) else bool(enable_images)
+        # Handle various string formats: "true", "True", "TRUE", "1", "yes", "on", etc.
+        def str_to_bool(value):
+            if isinstance(value, bool):
+                return value
+            if isinstance(value, str):
+                value_lower = value.lower().strip()
+                # True values
+                if value_lower in ('true', '1', 'yes', 'on', 'enabled', 'enable'):
+                    return True
+                # False values
+                if value_lower in ('false', '0', 'no', 'off', 'disabled', 'disable', '', 'none', 'null'):
+                    return False
+                # Default to True if unclear (for backwards compatibility)
+                logger.warning(f"Unknown boolean value '{value}', defaulting to True")
+                return True
+            # For non-string, non-bool values, convert to bool
+            return bool(value)
+        
+        enable_text = str_to_bool(enable_text)
+        enable_tables = str_to_bool(enable_tables)
+        enable_images = str_to_bool(enable_images)
+        
+        # Warn if all processing is disabled
+        if not enable_text and not enable_tables and not enable_images:
+            logger.warning(
+                "all_processing_disabled",
+                file_name=file_name,
+                message="All text, table, and image processing is disabled. No content will be extracted or indexed."
+            )
         
         # Log processor configuration (after conversion)
         logger.info(

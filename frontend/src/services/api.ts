@@ -73,6 +73,7 @@ export interface QueryRequest {
   enable_dense?: boolean;
   enable_table?: boolean;
   enable_image?: boolean;
+  enable_graph?: boolean;
 }
 
 export interface QueryResponse {
@@ -104,6 +105,7 @@ export const api = {
       enableText?: boolean;
       enableTables?: boolean;
       enableImages?: boolean;
+      enableGraph?: boolean;
     }
   ): Promise<IngestResponse> => {
     const formData = new FormData();
@@ -111,16 +113,38 @@ export const api = {
     
     // Add processor configuration options
     // Explicitly convert boolean to string, defaulting to true if undefined
-    const enableText = options?.enableText !== undefined ? String(options.enableText) : 'true';
-    const enableTables = options?.enableTables !== undefined ? String(options.enableTables) : 'true';
-    const enableImages = options?.enableImages !== undefined ? String(options.enableImages) : 'true';
+    // Ensure we always send 'true' or 'false' (lowercase strings) as expected by backend
+    const enableText = options?.enableText !== undefined && options.enableText !== null 
+      ? String(options.enableText).toLowerCase() 
+      : 'true';
+    const enableTables = options?.enableTables !== undefined && options.enableTables !== null
+      ? String(options.enableTables).toLowerCase()
+      : 'true';
+    const enableImages = options?.enableImages !== undefined && options.enableImages !== null
+      ? String(options.enableImages).toLowerCase()
+      : 'true';
+    const enableGraph = options?.enableGraph !== undefined && options.enableGraph !== null
+      ? String(options.enableGraph).toLowerCase()
+      : 'true';
     
     formData.append('enable_text', enableText);
     formData.append('enable_tables', enableTables);
     formData.append('enable_images', enableImages);
+    formData.append('enable_graph', enableGraph);
     
-    // Debug: log what we're sending
-    console.log('Sending processor config:', { enableText, enableTables, enableImages });
+    // Debug: log what we're sending (with original values for debugging)
+    console.log('API uploadDocument - Options received:', {
+      enableText: options?.enableText,
+      enableTables: options?.enableTables,
+      enableImages: options?.enableImages,
+      enableGraph: options?.enableGraph,
+    });
+    console.log('API uploadDocument - Values being sent to backend:', { 
+      enableText, 
+      enableTables, 
+      enableImages, 
+      enableGraph 
+    });
 
     const response = await apiClient.post<IngestResponse>(
       '/api/v1/ingest',

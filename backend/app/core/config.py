@@ -81,6 +81,15 @@ class Settings(BaseSettings):
     # VISION_PROCESSING_MODE, VISION_LLM_PROVIDER, VISION_LLM_MODEL, CAPTIONING_MODEL
     # OPENAI_API_KEY, GOOGLE_API_KEY
     
+    # Neo4j (Knowledge Graph) Settings
+    neo4j_uri: str = "bolt://localhost:7687"  # Use 'bolt://neo4j:7687' when backend runs in Docker
+    neo4j_user: str = "neo4j"
+    neo4j_password: str = "neo4j-password"  # Should be loaded from .env
+    neo4j_database: str = "neo4j"  # Default database (use 'neo4j' or specific database name)
+    neo4j_timeout: int = 30  # Connection timeout in seconds
+    neo4j_max_connection_pool_size: int = 50  # Connection pool size
+    neo4j_enabled: bool = True  # Feature flag to enable/disable Neo4j
+    
     # Observability Settings (Optional)
     loki_enabled: bool = False  # Whether to push logs directly to Loki (optional, Promtail handles collection)
     loki_url: str = "http://localhost:3100"  # Loki API URL
