@@ -1173,15 +1173,19 @@ class IngestionPipeline:
         entities: List[Dict[str, Any]],
         chunks: List[Chunk],
         chunk_ids: List[UUID],
+        table_chunks: Optional[List[ProcessedTable]] = None,
+        table_chunk_ids: Optional[List[UUID]] = None,
         section_id: str = ""  # Unused but kept for API compatibility
     ) -> List[Dict[str, Any]]:
         """
-        Link entities to chunks where they appear (matching POC approach).
+        Link entities to chunks (text and tables) where they appear.
         
         Args:
             entities: List of entity dictionaries
             chunks: List of text chunks
-            chunk_ids: List of chunk UUIDs
+            chunk_ids: List of text chunk UUIDs
+            table_chunks: List of table chunks (optional)
+            table_chunk_ids: List of table chunk UUIDs (optional)
             section_id: Section identifier
             
         Returns:
@@ -1194,7 +1198,7 @@ class IngestionPipeline:
         # Create a mapping of entity names for quick lookup
         entity_map = {e["entity_name"].lower(): e for e in entities}
         
-        # Link entities to chunks
+        # Link entities to TEXT chunks
         for chunk, chunk_id in zip(chunks, chunk_ids):
             chunk_text_lower = chunk.text.lower()
             
@@ -1214,8 +1218,49 @@ class IngestionPipeline:
                         "properties": {
                             RELATIONSHIP_PROPERTIES['FREQUENCY']: frequency,
                             RELATIONSHIP_PROPERTIES['IMPORTANCE']: min(0.9, 0.5 + (frequency * 0.1)),
+                            RELATIONSHIP_PROPERTIES['CONTEXT']: 'text',
                         }
                     })
+        
+        # Link entities to TABLE chunks
+        if table_chunks and table_chunk_ids:
+            logger.debug(f"Linking entities to {len(table_chunks)} table chunks...")
+            table_relationships_count = 0
+            
+            for table_chunk, table_chunk_id in zip(table_chunks, table_chunk_ids):
+                # Get table text (markdown or text format)
+                table_text = ""
+                if hasattr(table_chunk, 'table_markdown') and table_chunk.table_markdown:
+                    table_text = table_chunk.table_markdown.lower()
+                elif hasattr(table_chunk, 'table_text') and table_chunk.table_text:
+                    table_text = table_chunk.table_text.lower()
+                
+                if not table_text:
+                    continue
+                
+                for entity_name, entity in entity_map.items():
+                    # Count frequency in table
+                    frequency = table_text.count(entity_name)
+                    
+                    if frequency > 0:
+                        relationships.append({
+                            "from_label": NODE_LABELS['CHUNK'],
+                            "from_id_key": PROPERTY_KEYS['CHUNK_ID'],
+                            "from_id_value": str(table_chunk_id),
+                            "to_label": NODE_LABELS['ENTITY'],
+                            "to_id_key": PROPERTY_KEYS['ENTITY_ID'],
+                            "to_id_value": entity["entity_id"],
+                            "relationship_type": RELATIONSHIP_TYPES['MENTIONS'],
+                            "properties": {
+                                RELATIONSHIP_PROPERTIES['FREQUENCY']: frequency,
+                                RELATIONSHIP_PROPERTIES['IMPORTANCE']: min(0.9, 0.5 + (frequency * 0.1)),
+                                RELATIONSHIP_PROPERTIES['CONTEXT']: 'table',
+                            }
+                        })
+                        table_relationships_count += 1
+            
+            if table_relationships_count > 0:
+                logger.info(f"Created {table_relationships_count} entity-table relationships")
         
         return relationships
     
@@ -1540,18 +1585,19 @@ class IngestionPipeline:
                 elif hasattr(table_chunk, 'table_text') and table_chunk.table_text:
                     table_content = table_chunk.table_text[:50000] if len(table_chunk.table_text) > 50000 else table_chunk.table_text
                 
-                    target_section["chunks"].append({
+                # Add table chunk to section (fixed indentation - was incorrectly inside elif block)
+                target_section["chunks"].append({
                     "chunk_id": str(table_chunk_id),
                     "chunk_index": len(chunks) + idx,
                     "chunk_type": "table",
-                        "content": table_content,
+                    "content": table_content,
                     "metadata": table_chunk.metadata if hasattr(table_chunk, 'metadata') and table_chunk.metadata else {},
                 })
                 table_chunks_added += 1
             except Exception as e:
                 logger.warning(f"Failed to add table chunk {table_chunk_id} to graph: {e}")
         
-            logger.debug(f"Added {table_chunks_added} table chunks")
+        logger.debug(f"Added {table_chunks_added} table chunks")
         
         # Add image chunks to the last section
         if image_chunk_ids:
@@ -1716,13 +1762,20 @@ class IngestionPipeline:
                 logger.info(f"Extracted {len(entities)} unique entities, creating entity nodes...")
                 self.graph_repo.create_entity_nodes_batch(entities)
                 
-                # Link entities to chunks
-                logger.info(f"Linking entities to chunks...")
+                # Link entities to chunks (text and tables)
+                logger.info(f"Linking entities to {len(chunks)} text chunks and {len(table_chunks)} table chunks...")
                 RELATIONSHIP_BATCH_SIZE = 1000
                 
                 # Use first section ID as default (entities are linked to chunks, not sections directly)
                 default_section_id = sections[0]["section_id"] if sections else "default"
-                relationships = self._link_entities_to_chunks(entities, chunks, chunk_ids, default_section_id)
+                relationships = self._link_entities_to_chunks(
+                    entities, 
+                    chunks, 
+                    chunk_ids,
+                    table_chunks,      # Include table chunks
+                    table_chunk_ids,   # Include table chunk IDs
+                    default_section_id
+                )
                 
                 if relationships:
                     logger.info(f"Creating {len(relationships)} entity-chunk relationships")

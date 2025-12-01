@@ -285,43 +285,43 @@ def create_tech_sector_pdf(output_path: str = "tech_sector_report.pdf"):
     # Table 1: Global Tech Sector Revenue Growth
     story.append(Paragraph("Global Tech Sector Revenue Growth (2020-2024)", heading_style))
     
-    # table1_data = [
-    #     ['Year', 'Revenue<br/>(Trillion USD)', 'Growth<br/>Rate (%)', 'Key Drivers'],
-    #     ['2020', '4.2', '5.3', 'Remote work, digital transformation'],
-    #     ['2021', '4.8', '14.3', 'Cloud migration, e-commerce'],
-    #     ['2022', '5.3', '10.4', 'AI/ML, cybersecurity'],
-    #     ['2023', '5.8', '9.4', 'Enterprise software, analytics'],
-    #     ['2024', '6.4', '10.3', 'Generative AI, automation']
-    # ]
-    # 
-    # # Convert table data to Paragraphs for better text wrapping
-    # table1_paragraphs = []
-    # header_style = ParagraphStyle('TableHeader', parent=styles['Normal'], fontSize=9, fontName='Helvetica-Bold', alignment=TA_CENTER)
-    # for i, row in enumerate(table1_data):
-    #     if i == 0:  # Header row
-    #         para_row = [Paragraph(str(cell).replace('<br/>', '<br/>'), header_style) for cell in row]
-    #     else:
-    #         para_row = [Paragraph(str(cell), styles['Normal']) if '<br/>' in str(cell) else str(cell) for cell in row]
-    #     table1_paragraphs.append(para_row)
-    # 
-    # table1_data = table1_paragraphs
-    # 
-    # table1 = Table(table1_data, colWidths=[0.8*inch, 1.6*inch, 1.0*inch, 2.1*inch])
-    # table1.setStyle(TableStyle([
-    #     ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#3949ab')),
-    #     ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
-    #     ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
-    #     ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
-    #     ('FONTSIZE', (0, 0), (-1, 0), 9),
-    #     ('BOTTOMPADDING', (0, 0), (-1, 0), 12),
-    #     ('BACKGROUND', (0, 1), (-1, -1), colors.beige),
-    #     ('GRID', (0, 0), (-1, -1), 1, colors.black),
-    #     ('FONTSIZE', (0, 1), (-1, -1), 8),
-    #     ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
-    #     ('ROWBACKGROUNDS', (0, 1), (-1, -1), [colors.white, colors.lightgrey])
-    # ]))
-    # 
-    # story.append(table1)
+    table1_data = [
+        ['Year', 'Revenue<br/>(Trillion USD)', 'Growth<br/>Rate (%)', 'Key Drivers'],
+        ['2020', '4.2', '5.3', 'Remote work, digital transformation'],
+        ['2021', '4.8', '14.3', 'Cloud migration, e-commerce'],
+        ['2022', '5.3', '10.4', 'AI/ML, cybersecurity'],
+        ['2023', '5.8', '9.4', 'Enterprise software, analytics'],
+        ['2024', '6.4', '10.3', 'Generative AI, automation']
+    ]
+    
+    # Convert table data to Paragraphs for better text wrapping
+    table1_paragraphs = []
+    header_style = ParagraphStyle('TableHeader', parent=styles['Normal'], fontSize=9, fontName='Helvetica-Bold', alignment=TA_CENTER)
+    for i, row in enumerate(table1_data):
+        if i == 0:  # Header row
+            para_row = [Paragraph(str(cell).replace('<br/>', '<br/>'), header_style) for cell in row]
+        else:
+            para_row = [Paragraph(str(cell), styles['Normal']) if '<br/>' in str(cell) else str(cell) for cell in row]
+        table1_paragraphs.append(para_row)
+    
+    table1_data = table1_paragraphs
+    
+    table1 = Table(table1_data, colWidths=[0.8*inch, 1.6*inch, 1.0*inch, 2.1*inch])
+    table1.setStyle(TableStyle([
+        ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#3949ab')),
+        ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
+        ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
+        ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+        ('FONTSIZE', (0, 0), (-1, 0), 9),
+        ('BOTTOMPADDING', (0, 0), (-1, 0), 12),
+        ('BACKGROUND', (0, 1), (-1, -1), colors.beige),
+        ('GRID', (0, 0), (-1, -1), 1, colors.black),
+        ('FONTSIZE', (0, 1), (-1, -1), 8),
+        ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
+        ('ROWBACKGROUNDS', (0, 1), (-1, -1), [colors.white, colors.lightgrey])
+    ]))
+    
+    story.append(table1)
     story.append(Spacer(1, 0.2*inch))
     
     # Add revenue growth bar chart
@@ -407,45 +407,45 @@ def create_tech_sector_pdf(output_path: str = "tech_sector_report.pdf"):
     # Table 2: Market Share by Segment
     story.append(Paragraph("Market Share by Technology Segment (2024)", heading_style))
     
-    # table2_data = [
-    #     ['Segment', 'Market<br/>Share (%)', 'Revenue<br/>(Billion USD)', 'Growth<br/>Rate (%)'],
-    #     ['Software & Services', '38', '2,432', '12.5'],
-    #     ['Cloud Computing', '22', '1,408', '18.2'],
-    #     ['Hardware & Devices', '18', '1,152', '6.8'],
-    #     ['Telecommunications', '12', '768', '4.2'],
-    #     ['Cybersecurity', '5', '320', '15.7'],
-    #     ['AI & ML', '3', '192', '28.5'],
-    #     ['Other', '2', '128', '8.1']
-    # ]
-    # 
-    # # Convert table data to Paragraphs
-    # header_style = ParagraphStyle('TableHeader', parent=styles['Normal'], fontSize=9, fontName='Helvetica-Bold', alignment=TA_CENTER)
-    # table2_paragraphs = []
-    # for i, row in enumerate(table2_data):
-    #     if i == 0:  # Header row
-    #         para_row = [Paragraph(str(cell).replace('<br/>', '<br/>'), header_style) for cell in row]
-    #     else:
-    #         para_row = [Paragraph(str(cell), styles['Normal']) if '<br/>' in str(cell) else str(cell) for cell in row]
-    #     table2_paragraphs.append(para_row)
-    # 
-    # table2_data = table2_paragraphs
-    # 
-    # table2 = Table(table2_data, colWidths=[1.6*inch, 1.2*inch, 1.5*inch, 1.2*inch])
-    # table2.setStyle(TableStyle([
-    #     ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#3949ab')),
-    #     ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
-    #     ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
-    #     ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
-    #     ('FONTSIZE', (0, 0), (-1, 0), 9),
-    #     ('BOTTOMPADDING', (0, 0), (-1, 0), 12),
-    #     ('BACKGROUND', (0, 1), (-1, -1), colors.beige),
-    #     ('GRID', (0, 0), (-1, -1), 1, colors.black),
-    #     ('FONTSIZE', (0, 1), (-1, -1), 8),
-    #     ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
-    #     ('ROWBACKGROUNDS', (0, 1), (-1, -1), [colors.white, colors.lightgrey])
-    # ]))
-    # 
-    # story.append(table2)
+    table2_data = [
+        ['Segment', 'Market<br/>Share (%)', 'Revenue<br/>(Billion USD)', 'Growth<br/>Rate (%)'],
+        ['Software & Services', '38', '2,432', '12.5'],
+        ['Cloud Computing', '22', '1,408', '18.2'],
+        ['Hardware & Devices', '18', '1,152', '6.8'],
+        ['Telecommunications', '12', '768', '4.2'],
+        ['Cybersecurity', '5', '320', '15.7'],
+        ['AI & ML', '3', '192', '28.5'],
+        ['Other', '2', '128', '8.1']
+    ]
+    
+    # Convert table data to Paragraphs
+    header_style = ParagraphStyle('TableHeader', parent=styles['Normal'], fontSize=9, fontName='Helvetica-Bold', alignment=TA_CENTER)
+    table2_paragraphs = []
+    for i, row in enumerate(table2_data):
+        if i == 0:  # Header row
+            para_row = [Paragraph(str(cell).replace('<br/>', '<br/>'), header_style) for cell in row]
+        else:
+            para_row = [Paragraph(str(cell), styles['Normal']) if '<br/>' in str(cell) else str(cell) for cell in row]
+        table2_paragraphs.append(para_row)
+    
+    table2_data = table2_paragraphs
+    
+    table2 = Table(table2_data, colWidths=[1.6*inch, 1.2*inch, 1.5*inch, 1.2*inch])
+    table2.setStyle(TableStyle([
+        ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#3949ab')),
+        ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
+        ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
+        ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+        ('FONTSIZE', (0, 0), (-1, 0), 9),
+        ('BOTTOMPADDING', (0, 0), (-1, 0), 12),
+        ('BACKGROUND', (0, 1), (-1, -1), colors.beige),
+        ('GRID', (0, 0), (-1, -1), 1, colors.black),
+        ('FONTSIZE', (0, 1), (-1, -1), 8),
+        ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
+        ('ROWBACKGROUNDS', (0, 1), (-1, -1), [colors.white, colors.lightgrey])
+    ]))
+    
+    story.append(table2)
     story.append(Spacer(1, 0.2*inch))
     
     # Add market share pie chart
@@ -566,43 +566,43 @@ def create_tech_sector_pdf(output_path: str = "tech_sector_report.pdf"):
     # Table 3: Regional Market Analysis
     story.append(Paragraph("Regional Technology Market Overview (2024)", heading_style))
     
-    # table3_data = [
-    #     ['Region', 'Market Size<br/>(Billion USD)', 'Growth<br/>Rate (%)', 'Key Markets'],
-    #     ['North America', '2,560', '9.8', 'USA, Canada'],
-    #     ['Asia-Pacific', '2,048', '14.2', 'China, India, Japan, SG'],
-    #     ['Europe', '1,280', '7.5', 'UK, Germany, France'],
-    #     ['Latin America', '384', '12.1', 'Brazil, Mexico, Argentina'],
-    #     ['MENA', '128', '11.3', 'UAE, Israel, South Africa']
-    # ]
-    # 
-    # # Convert table data to Paragraphs
-    # header_style = ParagraphStyle('TableHeader', parent=styles['Normal'], fontSize=9, fontName='Helvetica-Bold', alignment=TA_CENTER)
-    # table3_paragraphs = []
-    # for i, row in enumerate(table3_data):
-    #     if i == 0:  # Header row
-    #         para_row = [Paragraph(str(cell).replace('<br/>', '<br/>'), header_style) for cell in row]
-    #     else:
-    #         para_row = [Paragraph(str(cell), styles['Normal']) if '<br/>' in str(cell) else str(cell) for cell in row]
-    #     table3_paragraphs.append(para_row)
-    # 
-    # table3_data = table3_paragraphs
-    # 
-    # table3 = Table(table3_data, colWidths=[1.3*inch, 1.5*inch, 1.2*inch, 2.0*inch])
-    # table3.setStyle(TableStyle([
-    #     ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#3949ab')),
-    #     ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
-    #     ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
-    #     ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
-    #     ('FONTSIZE', (0, 0), (-1, 0), 9),
-    #     ('BOTTOMPADDING', (0, 0), (-1, 0), 12),
-    #     ('BACKGROUND', (0, 1), (-1, -1), colors.beige),
-    #     ('GRID', (0, 0), (-1, -1), 1, colors.black),
-    #     ('FONTSIZE', (0, 1), (-1, -1), 8),
-    #     ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
-    #     ('ROWBACKGROUNDS', (0, 1), (-1, -1), [colors.white, colors.lightgrey])
-    # ]))
-    # 
-    # story.append(table3)
+    table3_data = [
+        ['Region', 'Market Size<br/>(Billion USD)', 'Growth<br/>Rate (%)', 'Key Markets'],
+        ['North America', '2,560', '9.8', 'USA, Canada'],
+        ['Asia-Pacific', '2,048', '14.2', 'China, India, Japan, SG'],
+        ['Europe', '1,280', '7.5', 'UK, Germany, France'],
+        ['Latin America', '384', '12.1', 'Brazil, Mexico, Argentina'],
+        ['MENA', '128', '11.3', 'UAE, Israel, South Africa']
+    ]
+    
+    # Convert table data to Paragraphs
+    header_style = ParagraphStyle('TableHeader', parent=styles['Normal'], fontSize=9, fontName='Helvetica-Bold', alignment=TA_CENTER)
+    table3_paragraphs = []
+    for i, row in enumerate(table3_data):
+        if i == 0:  # Header row
+            para_row = [Paragraph(str(cell).replace('<br/>', '<br/>'), header_style) for cell in row]
+        else:
+            para_row = [Paragraph(str(cell), styles['Normal']) if '<br/>' in str(cell) else str(cell) for cell in row]
+        table3_paragraphs.append(para_row)
+    
+    table3_data = table3_paragraphs
+    
+    table3 = Table(table3_data, colWidths=[1.3*inch, 1.5*inch, 1.2*inch, 2.0*inch])
+    table3.setStyle(TableStyle([
+        ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#3949ab')),
+        ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
+        ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
+        ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+        ('FONTSIZE', (0, 0), (-1, 0), 9),
+        ('BOTTOMPADDING', (0, 0), (-1, 0), 12),
+        ('BACKGROUND', (0, 1), (-1, -1), colors.beige),
+        ('GRID', (0, 0), (-1, -1), 1, colors.black),
+        ('FONTSIZE', (0, 1), (-1, -1), 8),
+        ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
+        ('ROWBACKGROUNDS', (0, 1), (-1, -1), [colors.white, colors.lightgrey])
+    ]))
+    
+    story.append(table3)
     story.append(Spacer(1, 0.2*inch))
     
     # Add regional markets bar chart
@@ -702,44 +702,44 @@ def create_tech_sector_pdf(output_path: str = "tech_sector_report.pdf"):
     # Table 4: Employment Statistics
     story.append(Paragraph("Technology Sector Employment Statistics", heading_style))
     
-    # table4_data = [
-    #     ['Job Category', 'Employment<br/>(Millions)', 'Growth<br/>Rate (%)', 'Top Skills'],
-    #     ['Software Dev', '26.8', '8.5', 'Programming, Agile, DevOps'],
-    #     ['IT Support', '18.3', '4.2', 'Troubleshooting, Support'],
-    #     ['Cybersecurity', '4.1', '12.7', 'Security, Risk Assessment'],
-    #     ['Data Science', '3.9', '15.3', 'Python, ML, Statistics'],
-    #     ['Cloud Architecture', '2.7', '18.9', 'AWS/Azure, Design'],
-    #     ['AI/ML Engineering', '1.2', '24.5', 'TensorFlow, Neural Nets']
-    # ]
-    # 
-    # # Convert table data to Paragraphs
-    # header_style = ParagraphStyle('TableHeader', parent=styles['Normal'], fontSize=9, fontName='Helvetica-Bold', alignment=TA_CENTER)
-    # table4_paragraphs = []
-    # for i, row in enumerate(table4_data):
-    #     if i == 0:  # Header row
-    #         para_row = [Paragraph(str(cell).replace('<br/>', '<br/>'), header_style) for cell in row]
-    #     else:
-    #         para_row = [Paragraph(str(cell), styles['Normal']) if '<br/>' in str(cell) else str(cell) for cell in row]
-    #     table4_paragraphs.append(para_row)
-    # 
-    # table4_data = table4_paragraphs
-    # 
-    # table4 = Table(table4_data, colWidths=[1.5*inch, 1.3*inch, 1.2*inch, 2.0*inch])
-    # table4.setStyle(TableStyle([
-    #     ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#3949ab')),
-    #     ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
-    #     ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
-    #     ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
-    #     ('FONTSIZE', (0, 0), (-1, 0), 9),
-    #     ('BOTTOMPADDING', (0, 0), (-1, 0), 12),
-    #     ('BACKGROUND', (0, 1), (-1, -1), colors.beige),
-    #     ('GRID', (0, 0), (-1, -1), 1, colors.black),
-    #     ('FONTSIZE', (0, 1), (-1, -1), 7),
-    #     ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
-    #     ('ROWBACKGROUNDS', (0, 1), (-1, -1), [colors.white, colors.lightgrey])
-    # ]))
-    # 
-    # story.append(table4)
+    table4_data = [
+        ['Job Category', 'Employment<br/>(Millions)', 'Growth<br/>Rate (%)', 'Top Skills'],
+        ['Software Dev', '26.8', '8.5', 'Programming, Agile, DevOps'],
+        ['IT Support', '18.3', '4.2', 'Troubleshooting, Support'],
+        ['Cybersecurity', '4.1', '12.7', 'Security, Risk Assessment'],
+        ['Data Science', '3.9', '15.3', 'Python, ML, Statistics'],
+        ['Cloud Architecture', '2.7', '18.9', 'AWS/Azure, Design'],
+        ['AI/ML Engineering', '1.2', '24.5', 'TensorFlow, Neural Nets']
+    ]
+    
+    # Convert table data to Paragraphs
+    header_style = ParagraphStyle('TableHeader', parent=styles['Normal'], fontSize=9, fontName='Helvetica-Bold', alignment=TA_CENTER)
+    table4_paragraphs = []
+    for i, row in enumerate(table4_data):
+        if i == 0:  # Header row
+            para_row = [Paragraph(str(cell).replace('<br/>', '<br/>'), header_style) for cell in row]
+        else:
+            para_row = [Paragraph(str(cell), styles['Normal']) if '<br/>' in str(cell) else str(cell) for cell in row]
+        table4_paragraphs.append(para_row)
+    
+    table4_data = table4_paragraphs
+    
+    table4 = Table(table4_data, colWidths=[1.5*inch, 1.3*inch, 1.2*inch, 2.0*inch])
+    table4.setStyle(TableStyle([
+        ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#3949ab')),
+        ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
+        ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
+        ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+        ('FONTSIZE', (0, 0), (-1, 0), 9),
+        ('BOTTOMPADDING', (0, 0), (-1, 0), 12),
+        ('BACKGROUND', (0, 1), (-1, -1), colors.beige),
+        ('GRID', (0, 0), (-1, -1), 1, colors.black),
+        ('FONTSIZE', (0, 1), (-1, -1), 7),
+        ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
+        ('ROWBACKGROUNDS', (0, 1), (-1, -1), [colors.white, colors.lightgrey])
+    ]))
+    
+    story.append(table4)
     story.append(Spacer(1, 0.2*inch))
     
     # Add employment bar chart
@@ -838,45 +838,45 @@ def create_tech_sector_pdf(output_path: str = "tech_sector_report.pdf"):
     # Table 5: Projected Growth by Technology Area
     story.append(Paragraph("Projected Growth by Technology Area (2025-2027)", heading_style))
     
-    # table5_data = [
-    #     ['Technology Area', '2025 Forecast<br/>(Billion USD)', '2027 Forecast<br/>(Billion USD)', 'CAGR (%)'],
-    #     ['Artificial Intelligence', '450', '680', '23.0'],
-    #     ['Cloud Computing', '620', '890', '19.8'],
-    #     ['Cybersecurity', '180', '260', '20.2'],
-    #     ['Edge Computing', '95', '165', '31.7'],
-    #     ['Blockchain', '45', '78', '31.5'],
-    #     ['Quantum Computing', '8', '18', '50.0'],
-    #     ['IoT Solutions', '220', '340', '24.4']
-    # ]
-    # 
-    # # Convert table data to Paragraphs
-    # header_style = ParagraphStyle('TableHeader', parent=styles['Normal'], fontSize=9, fontName='Helvetica-Bold', alignment=TA_CENTER)
-    # table5_paragraphs = []
-    # for i, row in enumerate(table5_data):
-    #     if i == 0:  # Header row
-    #         para_row = [Paragraph(str(cell).replace('<br/>', '<br/>'), header_style) for cell in row]
-    #     else:
-    #         para_row = [Paragraph(str(cell), styles['Normal']) if '<br/>' in str(cell) else str(cell) for cell in row]
-    #     table5_paragraphs.append(para_row)
-    # 
-    # table5_data = table5_paragraphs
-    # 
-    # table5 = Table(table5_data, colWidths=[1.5*inch, 1.5*inch, 1.5*inch, 1.0*inch])
-    # table5.setStyle(TableStyle([
-    #     ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#3949ab')),
-    #     ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
-    #     ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
-    #     ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
-    #     ('FONTSIZE', (0, 0), (-1, 0), 9),
-    #     ('BOTTOMPADDING', (0, 0), (-1, 0), 12),
-    #     ('BACKGROUND', (0, 1), (-1, -1), colors.beige),
-    #     ('GRID', (0, 0), (-1, -1), 1, colors.black),
-    #     ('FONTSIZE', (0, 1), (-1, -1), 8),
-    #     ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
-    #     ('ROWBACKGROUNDS', (0, 1), (-1, -1), [colors.white, colors.lightgrey])
-    # ]))
-    # 
-    # story.append(table5)
+    table5_data = [
+        ['Technology Area', '2025 Forecast<br/>(Billion USD)', '2027 Forecast<br/>(Billion USD)', 'CAGR (%)'],
+        ['Artificial Intelligence', '450', '680', '23.0'],
+        ['Cloud Computing', '620', '890', '19.8'],
+        ['Cybersecurity', '180', '260', '20.2'],
+        ['Edge Computing', '95', '165', '31.7'],
+        ['Blockchain', '45', '78', '31.5'],
+        ['Quantum Computing', '8', '18', '50.0'],
+        ['IoT Solutions', '220', '340', '24.4']
+    ]
+    
+    # Convert table data to Paragraphs
+    header_style = ParagraphStyle('TableHeader', parent=styles['Normal'], fontSize=9, fontName='Helvetica-Bold', alignment=TA_CENTER)
+    table5_paragraphs = []
+    for i, row in enumerate(table5_data):
+        if i == 0:  # Header row
+            para_row = [Paragraph(str(cell).replace('<br/>', '<br/>'), header_style) for cell in row]
+        else:
+            para_row = [Paragraph(str(cell), styles['Normal']) if '<br/>' in str(cell) else str(cell) for cell in row]
+        table5_paragraphs.append(para_row)
+    
+    table5_data = table5_paragraphs
+    
+    table5 = Table(table5_data, colWidths=[1.5*inch, 1.5*inch, 1.5*inch, 1.0*inch])
+    table5.setStyle(TableStyle([
+        ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#3949ab')),
+        ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
+        ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
+        ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+        ('FONTSIZE', (0, 0), (-1, 0), 9),
+        ('BOTTOMPADDING', (0, 0), (-1, 0), 12),
+        ('BACKGROUND', (0, 1), (-1, -1), colors.beige),
+        ('GRID', (0, 0), (-1, -1), 1, colors.black),
+        ('FONTSIZE', (0, 1), (-1, -1), 8),
+        ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
+        ('ROWBACKGROUNDS', (0, 1), (-1, -1), [colors.white, colors.lightgrey])
+    ]))
+    
+    story.append(table5)
     story.append(Spacer(1, 0.2*inch))
     
     # Add projected growth bar chart

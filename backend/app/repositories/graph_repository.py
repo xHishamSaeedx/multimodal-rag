@@ -871,6 +871,37 @@ class GraphRepository:
                 if entities_deleted > 0:
                     logger.info(f"Deleted {entities_deleted} orphaned entity nodes")
             
+            # Step 4b: Delete completely disconnected entities (no relationships at all)
+            # This handles entities that were created but never linked due to bugs
+            disconnected_entities_query = f"""
+            MATCH (e:{NODE_LABELS['ENTITY']})
+            WHERE NOT (e)--()
+            DETACH DELETE e
+            RETURN count(e) AS deleted_count
+            """
+            result = session.run(disconnected_entities_query)
+            record = result.single()
+            disconnected_entities_deleted = record["deleted_count"] if record else 0
+            if disconnected_entities_deleted > 0:
+                logger.info(f"Deleted {disconnected_entities_deleted} completely disconnected entity nodes")
+                entities_deleted += disconnected_entities_deleted
+            
+            # Step 4c: Delete entities that have no connection to any chunks
+            # (they might be connected to other entities via RELATED_TO but are not mentioned in any chunk)
+            unlinked_entities_query = f"""
+            MATCH (e:{NODE_LABELS['ENTITY']})
+            WHERE NOT (e)<-[:{RELATIONSHIP_TYPES['MENTIONS']}]-()
+            AND NOT (e)<-[:{RELATIONSHIP_TYPES['ABOUT']}]-()
+            DETACH DELETE e
+            RETURN count(e) AS deleted_count
+            """
+            result = session.run(unlinked_entities_query)
+            record = result.single()
+            unlinked_entities_deleted = record["deleted_count"] if record else 0
+            if unlinked_entities_deleted > 0:
+                logger.info(f"Deleted {unlinked_entities_deleted} entities with no chunk connections")
+                entities_deleted += unlinked_entities_deleted
+            
             # Step 5: Delete the identified orphaned media
             media_deleted = 0
             if orphan_media_ids:
@@ -949,6 +980,58 @@ class GraphRepository:
                 exc_info=True
             )
             raise DatabaseError(f"Graph deletion failed: {str(e)}")
+        finally:
+            session.close()
+    
+    def cleanup_orphaned_entities(self) -> Dict[str, int]:
+        """
+        Clean up orphaned entities across the entire database.
+        
+        Removes:
+        1. Entities with no relationships at all (completely disconnected)
+        2. Entities not connected to any chunks (no MENTIONS or ABOUT relationships)
+        
+        This is useful for cleaning up after bugs where entities were created
+        but never properly linked to document chunks.
+        
+        Returns:
+            Dictionary with deletion counts
+        """
+        driver = self._get_driver()
+        session = driver.session(database=self.database)
+        
+        try:
+            # Step 1: Delete completely disconnected entities
+            disconnected_query = f"""
+            MATCH (e:{NODE_LABELS['ENTITY']})
+            WHERE NOT (e)--()
+            DETACH DELETE e
+            RETURN count(e) AS deleted_count
+            """
+            result = session.run(disconnected_query)
+            record = result.single()
+            disconnected_deleted = record["deleted_count"] if record else 0
+            
+            # Step 2: Delete entities with no chunk connections
+            unlinked_query = f"""
+            MATCH (e:{NODE_LABELS['ENTITY']})
+            WHERE NOT (e)<-[:{RELATIONSHIP_TYPES['MENTIONS']}]-()
+            AND NOT (e)<-[:{RELATIONSHIP_TYPES['ABOUT']}]-()
+            DETACH DELETE e
+            RETURN count(e) AS deleted_count
+            """
+            result = session.run(unlinked_query)
+            record = result.single()
+            unlinked_deleted = record["deleted_count"] if record else 0
+            
+            counts = {
+                "disconnected_entities_deleted": disconnected_deleted,
+                "unlinked_entities_deleted": unlinked_deleted,
+                "total_entities_deleted": disconnected_deleted + unlinked_deleted,
+            }
+            
+            logger.info(f"Cleaned up orphaned entities: {counts}")
+            return counts
         finally:
             session.close()
     
