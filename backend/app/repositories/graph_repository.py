@@ -762,23 +762,193 @@ class GraphRepository:
         finally:
             session.close()
     
-    def delete_document_graph(self, document_id: str) -> None:
+    def delete_document_graph(self, document_id: str) -> Dict[str, int]:
         """
-        Delete a document and all its related nodes from the graph.
+        Safely delete a document and all its related nodes from the knowledge graph.
+        
+        Deletion Strategy:
+        1. Identify entities that will become orphaned (only mentioned in this doc)
+        2. Identify media that will become orphaned (only attached to this doc)
+        3. Delete all Chunk nodes for this document
+        4. Delete orphaned Media nodes
+        5. Delete orphaned Entity nodes
+        6. Delete all Section nodes
+        7. Delete orphaned Topic nodes (topics only linked to this doc)
+        8. Delete the Document node itself
+        
+        This ensures:
+        - Complete cleanup of document-specific content
+        - Preservation of cross-document entities (shared entities)
+        - Cleanup of topics when last document is deleted
         
         Args:
             document_id: Document identifier (UUID as string)
-        """
-        query = f"""
-        MATCH (d:{NODE_LABELS['DOCUMENT']} {{{PROPERTY_KEYS['DOCUMENT_ID']}: $document_id}})
-        DETACH DELETE d
-        """
         
+        Returns:
+            Dictionary with deletion counts
+        """
         driver = self._get_driver()
         session = driver.session(database=self.database)
+        
         try:
-            session.run(query, document_id=document_id)
-            logger.info(f"Deleted document graph: {document_id}")
+            # Step 1: Identify entities that will become orphaned BEFORE deleting chunks
+            # (entities that are ONLY mentioned in this document's chunks)
+            orphan_entities_query = f"""
+            MATCH (d:{NODE_LABELS['DOCUMENT']} {{{PROPERTY_KEYS['DOCUMENT_ID']}: $document_id}})
+                  -[:{RELATIONSHIP_TYPES['HAS_SECTION']}]->(:{NODE_LABELS['SECTION']})
+                  -[:{RELATIONSHIP_TYPES['HAS_CHUNK']}]->(c:{NODE_LABELS['CHUNK']})
+                  -[:{RELATIONSHIP_TYPES['MENTIONS']}]->(e:{NODE_LABELS['ENTITY']})
+            WITH DISTINCT e
+            // Check if entity is mentioned in any OTHER chunks (outside this document)
+            WHERE NOT EXISTS {{
+                MATCH (other_chunk:{NODE_LABELS['CHUNK']})-[:{RELATIONSHIP_TYPES['MENTIONS']}]->(e)
+                WHERE NOT EXISTS {{
+                    MATCH (d:{NODE_LABELS['DOCUMENT']} {{{PROPERTY_KEYS['DOCUMENT_ID']}: $document_id}})
+                          -[:{RELATIONSHIP_TYPES['HAS_SECTION']}]->(:{NODE_LABELS['SECTION']})
+                          -[:{RELATIONSHIP_TYPES['HAS_CHUNK']}]->(other_chunk)
+                }}
+            }}
+            RETURN collect(e.{PROPERTY_KEYS['ENTITY_ID']}) AS orphan_entity_ids, count(e) AS orphan_count
+            """
+            result = session.run(orphan_entities_query, document_id=document_id)
+            record = result.single()
+            orphan_entity_ids = record["orphan_entity_ids"] if record else []
+            orphan_entities_count = record["orphan_count"] if record else 0
+            logger.debug(f"Identified {orphan_entities_count} entities that will become orphaned")
+            
+            # Step 2: Identify media that will become orphaned BEFORE deleting chunks
+            orphan_media_query = f"""
+            MATCH (d:{NODE_LABELS['DOCUMENT']} {{{PROPERTY_KEYS['DOCUMENT_ID']}: $document_id}})
+                  -[:{RELATIONSHIP_TYPES['HAS_SECTION']}]->(:{NODE_LABELS['SECTION']})
+                  -[:{RELATIONSHIP_TYPES['HAS_CHUNK']}]->(c:{NODE_LABELS['CHUNK']})
+                  -[:{RELATIONSHIP_TYPES['HAS_MEDIA']}]->(m:{NODE_LABELS['MEDIA']})
+            WITH DISTINCT m
+            // Check if media is attached to any OTHER chunks
+            WHERE NOT EXISTS {{
+                MATCH (other_chunk:{NODE_LABELS['CHUNK']})-[:{RELATIONSHIP_TYPES['HAS_MEDIA']}]->(m)
+                WHERE NOT EXISTS {{
+                    MATCH (d:{NODE_LABELS['DOCUMENT']} {{{PROPERTY_KEYS['DOCUMENT_ID']}: $document_id}})
+                          -[:{RELATIONSHIP_TYPES['HAS_SECTION']}]->(:{NODE_LABELS['SECTION']})
+                          -[:{RELATIONSHIP_TYPES['HAS_CHUNK']}]->(other_chunk)
+                }}
+            }}
+            RETURN collect(m.{PROPERTY_KEYS['MEDIA_ID']}) AS orphan_media_ids, count(m) AS orphan_count
+            """
+            result = session.run(orphan_media_query, document_id=document_id)
+            record = result.single()
+            orphan_media_ids = record["orphan_media_ids"] if record else []
+            orphan_media_count = record["orphan_count"] if record else 0
+            logger.debug(f"Identified {orphan_media_count} media nodes that will become orphaned")
+            
+            # Step 3: Delete all chunks for this document
+            # This removes MENTIONS, HAS_TOPIC, HAS_MEDIA, NEXT_CHUNK relationships
+            chunks_query = f"""
+            MATCH (d:{NODE_LABELS['DOCUMENT']} {{{PROPERTY_KEYS['DOCUMENT_ID']}: $document_id}})
+                  -[:{RELATIONSHIP_TYPES['HAS_SECTION']}]->(s:{NODE_LABELS['SECTION']})
+                  -[:{RELATIONSHIP_TYPES['HAS_CHUNK']}]->(c:{NODE_LABELS['CHUNK']})
+            WITH collect(c) AS chunks
+            UNWIND chunks AS chunk
+            DETACH DELETE chunk
+            RETURN count(chunk) AS chunks_deleted
+            """
+            result = session.run(chunks_query, document_id=document_id)
+            record = result.single()
+            chunks_deleted = record["chunks_deleted"] if record else 0
+            logger.info(f"Deleted {chunks_deleted} chunks for document {document_id}")
+            
+            # Step 4: Delete the identified orphaned entities
+            entities_deleted = 0
+            if orphan_entity_ids:
+                delete_entities_query = f"""
+                MATCH (e:{NODE_LABELS['ENTITY']})
+                WHERE e.{PROPERTY_KEYS['ENTITY_ID']} IN $entity_ids
+                DETACH DELETE e
+                RETURN count(e) AS deleted_count
+                """
+                result = session.run(delete_entities_query, entity_ids=orphan_entity_ids)
+                record = result.single()
+                entities_deleted = record["deleted_count"] if record else 0
+                if entities_deleted > 0:
+                    logger.info(f"Deleted {entities_deleted} orphaned entity nodes")
+            
+            # Step 5: Delete the identified orphaned media
+            media_deleted = 0
+            if orphan_media_ids:
+                delete_media_query = f"""
+                MATCH (m:{NODE_LABELS['MEDIA']})
+                WHERE m.{PROPERTY_KEYS['MEDIA_ID']} IN $media_ids
+                DETACH DELETE m
+                RETURN count(m) AS deleted_count
+                """
+                result = session.run(delete_media_query, media_ids=orphan_media_ids)
+                record = result.single()
+                media_deleted = record["deleted_count"] if record else 0
+                if media_deleted > 0:
+                    logger.info(f"Deleted {media_deleted} orphaned media nodes")
+            
+            # Step 6: Delete all sections for this document
+            sections_query = f"""
+            MATCH (d:{NODE_LABELS['DOCUMENT']} {{{PROPERTY_KEYS['DOCUMENT_ID']}: $document_id}})
+                  -[:{RELATIONSHIP_TYPES['HAS_SECTION']}]->(s:{NODE_LABELS['SECTION']})
+            DETACH DELETE s
+            RETURN count(s) AS sections_deleted
+            """
+            result = session.run(sections_query, document_id=document_id)
+            record = result.single()
+            sections_deleted = record["sections_deleted"] if record else 0
+            logger.info(f"Deleted {sections_deleted} sections for document {document_id}")
+            
+            # Step 7: Delete orphaned Topic nodes (topics with no remaining chunk/section links)
+            # Topics are meant to be global, but if no documents use them anymore, clean them up
+            topics_query = f"""
+            MATCH (t:{NODE_LABELS['TOPIC']})
+            WHERE NOT EXISTS {{
+                MATCH (:{NODE_LABELS['CHUNK']})-[:{RELATIONSHIP_TYPES['HAS_TOPIC']}]->(t)
+            }} AND NOT EXISTS {{
+                MATCH (:{NODE_LABELS['SECTION']})-[:{RELATIONSHIP_TYPES['HAS_TOPIC']}]->(t)
+            }}
+            DETACH DELETE t
+            RETURN count(t) AS topics_deleted
+            """
+            result = session.run(topics_query)
+            record = result.single()
+            topics_deleted = record["topics_deleted"] if record else 0
+            if topics_deleted > 0:
+                logger.info(f"Deleted {topics_deleted} orphaned topic nodes")
+            
+            # Step 8: Delete the document node itself
+            doc_query = f"""
+            MATCH (d:{NODE_LABELS['DOCUMENT']} {{{PROPERTY_KEYS['DOCUMENT_ID']}: $document_id}})
+            DETACH DELETE d
+            RETURN count(d) AS doc_deleted
+            """
+            result = session.run(doc_query, document_id=document_id)
+            record = result.single()
+            doc_deleted = record["doc_deleted"] if record else 0
+            
+            counts = {
+                "document_deleted": doc_deleted,
+                "sections_deleted": sections_deleted,
+                "chunks_deleted": chunks_deleted,
+                "media_deleted": media_deleted,
+                "orphaned_entities_deleted": entities_deleted,
+                "orphaned_topics_deleted": topics_deleted,
+            }
+            
+            logger.info(
+                f"Successfully deleted document graph: {document_id}",
+                extra={"deletion_counts": counts}
+            )
+            
+            return counts
+            
+        except Exception as e:
+            logger.error(
+                f"Failed to delete document graph: {document_id}",
+                extra={"error": str(e)},
+                exc_info=True
+            )
+            raise DatabaseError(f"Graph deletion failed: {str(e)}")
         finally:
             session.close()
     

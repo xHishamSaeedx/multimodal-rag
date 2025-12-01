@@ -374,9 +374,18 @@ async def delete_document(
             if settings.neo4j_enabled:
                 try:
                     graph_repo = GraphRepository()
-                    graph_repo.delete_document_graph(str(document.id))
-                    deletion_success.append("Neo4j knowledge graph")
-                    logger.info(f"Deleted document graph from Neo4j: {document.id}")
+                    deletion_counts = graph_repo.delete_document_graph(str(document.id))
+                    # Build detailed deletion message
+                    parts = [f"{deletion_counts.get('chunks_deleted', 0)} chunks"]
+                    if deletion_counts.get('sections_deleted', 0) > 0:
+                        parts.append(f"{deletion_counts.get('sections_deleted', 0)} sections")
+                    if deletion_counts.get('orphaned_entities_deleted', 0) > 0:
+                        parts.append(f"{deletion_counts.get('orphaned_entities_deleted', 0)} orphaned entities")
+                    if deletion_counts.get('orphaned_topics_deleted', 0) > 0:
+                        parts.append(f"{deletion_counts.get('orphaned_topics_deleted', 0)} orphaned topics")
+                    graph_details = f"Neo4j knowledge graph ({', '.join(parts)})"
+                    deletion_success.append(graph_details)
+                    logger.info(f"Deleted document graph from Neo4j: {document.id}", extra={"counts": deletion_counts})
                 except Exception as e:
                     deletion_errors.append(f"Neo4j: {str(e)}")
                     logger.error(f"Failed to delete from Neo4j: {str(e)}", exc_info=True)
