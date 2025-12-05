@@ -219,6 +219,7 @@ class GraphRetriever:
                     }
                 })
             
+            chunks = self._attach_media_metadata(chunks)
             # Record metrics
             query_duration = time.time() - query_start
             neo4j_graph_query_duration_seconds.labels(query_type="by_entity").observe(query_duration)
@@ -333,6 +334,7 @@ class GraphRetriever:
             else:
                 logger.debug(f"No sections found matching keywords: {keywords[:5]}")
             
+            chunks = self._attach_media_metadata(chunks)
             # Record metrics
             query_duration = time.time() - query_start
             neo4j_graph_query_duration_seconds.labels(query_type="by_section_title").observe(query_duration)
@@ -575,6 +577,7 @@ class GraphRetriever:
             # Sort final results by score
             all_chunks.sort(key=lambda x: (x.get("graph_score", 0.5), -x.get("chunk_index", 0)), reverse=True)
             chunks = all_chunks[:limit]
+            chunks = self._attach_media_metadata(chunks)
             
             # Record metrics
             query_duration = time.time() - query_start
@@ -717,9 +720,60 @@ class GraphRetriever:
             if chunks:
                 logger.info(f"Fallback content search found {len(chunks)} chunks matching keywords in content: {keywords[:5]}")
             
+            return self._attach_media_metadata(chunks)
+        finally:
+            session.close()
+    
+    def _attach_media_metadata(self, chunks: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+        """
+        Attach media metadata (url, caption) to image chunks.
+        
+        Args:
+            chunks: Retrieved chunk dictionaries
+        
+        Returns:
+            Chunks with media metadata added to the metadata field for image chunks.
+        """
+        if not chunks:
+            return chunks
+        
+        image_chunk_ids = [c.get("chunk_id") for c in chunks if c.get("chunk_type") == "image" and c.get("chunk_id")]
+        if not image_chunk_ids:
+            return chunks
+        
+        driver = self._get_driver()
+        session = driver.session(database=self.database)
+        try:
+            query = f"""
+            MATCH (c:{NODE_LABELS['CHUNK']})-[:{RELATIONSHIP_TYPES['HAS_MEDIA']}]->(m:{NODE_LABELS['MEDIA']})
+            WHERE c.{PROPERTY_KEYS['CHUNK_ID']} IN $chunk_ids
+            RETURN c.{PROPERTY_KEYS['CHUNK_ID']} AS chunk_id,
+                   collect({{
+                       media_id: m.{PROPERTY_KEYS['MEDIA_ID']},
+                       media_url: m.{PROPERTY_KEYS['MEDIA_URL']},
+                       media_type: m.{PROPERTY_KEYS['MEDIA_TYPE']},
+                       caption: m.{PROPERTY_KEYS['CAPTION']},
+                       alt_text: m.{PROPERTY_KEYS['ALT_TEXT']}
+                   }}) AS media
+            """
+            result = session.run(query, chunk_ids=image_chunk_ids)
+            media_map = {}
+            for record in result:
+                chunk_id = record["chunk_id"]
+                media_items = record["media"] or []
+                media_map[chunk_id] = [m for m in media_items if m.get("media_id")]
+        except Exception as e:
+            logger.debug(f"Failed to attach media metadata: {e}")
             return chunks
         finally:
             session.close()
+        
+        for chunk in chunks:
+            if chunk.get("chunk_type") == "image":
+                metadata = chunk.get("metadata") or {}
+                metadata["media"] = media_map.get(chunk.get("chunk_id"), [])
+                chunk["metadata"] = metadata
+        return chunks
     
     def query_by_document(
         self,
@@ -772,6 +826,7 @@ class GraphRetriever:
                     }
                 })
             
+            chunks = self._attach_media_metadata(chunks)
             # Record metrics
             query_duration = time.time() - query_start
             neo4j_graph_query_duration_seconds.labels(query_type="by_document").observe(query_duration)

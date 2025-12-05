@@ -458,6 +458,7 @@ class IngestionPipeline:
             image_storage_paths = []  # Track storage paths for each image
             processed_extracted_images = []  # Track which images were successfully processed
             image_embeddings = []  # Initialize to empty list in case no images are extracted
+            image_chunks_for_graph = []
             if extracted_images and self.enable_images:
                 logger.info(f"Step 6.6: Processing {len(extracted_images)} image(s)")
                 
@@ -512,28 +513,20 @@ class IngestionPipeline:
                                 **extracted_image.metadata,
                             },
                         )
-                        image_ids.append(image_id)
-                        image_storage_paths.append(storage_path)
-                        processed_extracted_images.append(extracted_image)
-                        
-                        # Create a chunk for the image (for consistency with text/table chunks)
-                        # The chunk will reference the image
-                        from uuid import uuid4
-                        image_chunk_id = uuid4()
-                        image_chunk_ids.append(image_chunk_id)
-                        
                         # Generate descriptive text for the image chunk
                         # This helps the LLM understand what the image contains
                         image_chunk_text = self._generate_image_chunk_text(
                             extracted_image=extracted_image,
                             extracted_content=extracted_content,
                         )
-                        
-                        # Store image chunk in database
-                        self.repository.create_chunk(
+
+                        # Create a chunk for the image (for consistency with text/table chunks)
+                        # The chunk will reference the image and carry caption/OCR text
+                        chunk_index = len(chunks) + len(processed_tables) + len(image_chunk_ids)
+                        image_chunk_id = self.repository.create_chunk(
                             document_id=document_id,
                             chunk_text=image_chunk_text,
-                            chunk_index=len(chunks) + len(processed_tables) + len(image_ids) - 1,
+                            chunk_index=chunk_index,
                             chunk_type="image",
                             image_path=storage_path,
                             image_caption=extracted_image.extracted_text,
@@ -547,6 +540,27 @@ class IngestionPipeline:
                                 "page": extracted_image.page,
                             },
                         )
+                        image_chunk_ids.append(image_chunk_id)
+                        
+                        image_ids.append(image_id)
+                        image_storage_paths.append(storage_path)
+                        processed_extracted_images.append(extracted_image)
+                        
+                        image_chunks_for_graph.append({
+                            "chunk_id": image_chunk_id,
+                            "chunk_index": chunk_index,
+                            "chunk_text": image_chunk_text,
+                            "caption": extracted_image.extracted_text,
+                            "image_id": str(image_id),
+                            "image_path": storage_path,
+                            "media_type": (extracted_image.image_type or "image").upper(),
+                            "metadata": {
+                                "width": extracted_image.width,
+                                "height": extracted_image.height,
+                                "page": extracted_image.page,
+                                "image_type": extracted_image.image_type,
+                            },
+                        })
                         
                     except Exception as e:
                         logger.warning(f"Failed to process image {extracted_image.image_index}: {e}")
@@ -584,9 +598,10 @@ class IngestionPipeline:
                     
                     # Prepare payloads for image chunks
                     image_payloads = []
-                    for i, (extracted_image, image_id, image_chunk_id, storage_path) in enumerate(
-                        zip(processed_extracted_images, image_ids, image_chunk_ids, image_storage_paths)
+                    for i, (extracted_image, image_id, image_chunk, storage_path) in enumerate(
+                        zip(processed_extracted_images, image_ids, image_chunks_for_graph, image_storage_paths)
                     ):
+                        image_chunk_id = image_chunk["chunk_id"]
                         payload = {
                             "chunk_id": str(image_chunk_id),
                             "document_id": str(document_id),
@@ -601,6 +616,7 @@ class IngestionPipeline:
                             "document_type": file_type,
                             "source": source,
                             "source_path": object_key,
+                            "chunk_index": image_chunk.get("chunk_index", len(chunks) + len(processed_tables) + i),
                             "metadata": {
                                 "width": extracted_image.width,
                                 "height": extracted_image.height,
@@ -705,6 +721,7 @@ class IngestionPipeline:
                         table_chunks=processed_tables,
                         table_chunk_ids=table_chunk_ids,
                         image_chunk_ids=image_chunk_ids,
+                        image_chunks=image_chunks_for_graph,
                         metadata=document_metadata,
                     )
                     logger.info("✓ Knowledge graph built successfully")
@@ -783,7 +800,8 @@ class IngestionPipeline:
     def _extract_entities_spacy(
         self,
         chunks: List[Chunk],
-        table_chunks: List[ProcessedTable]
+        table_chunks: List[ProcessedTable],
+        image_chunks: Optional[List[Dict[str, Any]]] = None
     ) -> List[Dict[str, Any]]:
         """
         Extract named entities using spaCy NER.
@@ -813,7 +831,7 @@ class IngestionPipeline:
         nlp = self._get_spacy_nlp()
         if nlp is None:
             # Fallback to regex if spaCy unavailable
-            return self._extract_entities_regex_fallback(chunks, table_chunks)
+            return self._extract_entities_regex_fallback(chunks, table_chunks, image_chunks)
         
         entities = []
         entity_map = {}  # Deduplicate by normalized_name
@@ -823,6 +841,20 @@ class IngestionPipeline:
         
         all_chunks_text = [chunk.text for chunk in chunks if chunk.text]
         all_text = " ".join(all_chunks_text)
+
+        # Add image-derived text (captions/OCR) for entity extraction
+        if image_chunks:
+            image_texts = []
+            for image_chunk in image_chunks[:10]:
+                text_value = ""
+                if isinstance(image_chunk, dict):
+                    text_value = image_chunk.get("chunk_text") or image_chunk.get("caption") or ""
+                else:
+                    text_value = getattr(image_chunk, "chunk_text", "") or getattr(image_chunk, "caption", "") or ""
+                if text_value:
+                    image_texts.append(text_value)
+            if image_texts:
+                all_text += " " + " ".join(image_texts)
         
         # Sample if too large
         if len(all_text) > MAX_TEXT_FOR_NER:
@@ -897,7 +929,8 @@ class IngestionPipeline:
     def _extract_entities_regex_fallback(
         self,
         chunks: List[Chunk],
-        table_chunks: List[ProcessedTable]
+        table_chunks: List[ProcessedTable],
+        image_chunks: Optional[List[Dict[str, Any]]] = None
     ) -> List[Dict[str, Any]]:
         """
         Fallback entity extraction using regex patterns.
@@ -919,6 +952,20 @@ class IngestionPipeline:
         
         MAX_TEXT = 500000
         all_text = " ".join([c.text for c in chunks if c.text])
+
+        # Include image captions/OCR to capture visual entities
+        if image_chunks:
+            image_texts = []
+            for image_chunk in image_chunks[:10]:
+                text_value = ""
+                if isinstance(image_chunk, dict):
+                    text_value = image_chunk.get("chunk_text") or image_chunk.get("caption") or ""
+                else:
+                    text_value = getattr(image_chunk, "chunk_text", "") or getattr(image_chunk, "caption", "") or ""
+                if text_value:
+                    image_texts.append(text_value)
+            if image_texts:
+                all_text += " " + " ".join(image_texts)
         
         if len(all_text) > MAX_TEXT:
             sample_size = max(100, len(chunks) // 10)
@@ -969,7 +1016,8 @@ class IngestionPipeline:
     def _extract_entities_simple(
         self,
         chunks: List[Chunk],
-        table_chunks: List[ProcessedTable]
+        table_chunks: List[ProcessedTable],
+        image_chunks: Optional[List[Dict[str, Any]]] = None
     ) -> List[Dict[str, Any]]:
         """
         Extract entities using spaCy NER with regex fallback.
@@ -984,7 +1032,7 @@ class IngestionPipeline:
         Returns:
             List of entity dictionaries with normalized_name for cross-doc matching
         """
-        return self._extract_entities_spacy(chunks, table_chunks)
+        return self._extract_entities_spacy(chunks, table_chunks, image_chunks)
     
     def _extract_topics_from_chunks(
         self,
@@ -1175,6 +1223,7 @@ class IngestionPipeline:
         chunk_ids: List[UUID],
         table_chunks: Optional[List[ProcessedTable]] = None,
         table_chunk_ids: Optional[List[UUID]] = None,
+        image_chunks: Optional[List[Dict[str, Any]]] = None,
         section_id: str = ""  # Unused but kept for API compatibility
     ) -> List[Dict[str, Any]]:
         """
@@ -1186,6 +1235,7 @@ class IngestionPipeline:
             chunk_ids: List of text chunk UUIDs
             table_chunks: List of table chunks (optional)
             table_chunk_ids: List of table chunk UUIDs (optional)
+            image_chunks: Optional list of image chunk dicts (with chunk_id and caption text)
             section_id: Section identifier
             
         Returns:
@@ -1261,6 +1311,41 @@ class IngestionPipeline:
             
             if table_relationships_count > 0:
                 logger.info(f"Created {table_relationships_count} entity-table relationships")
+
+        # Link entities to IMAGE chunks using caption/OCR text
+        if image_chunks:
+            image_relationships_count = 0
+            for image_chunk in image_chunks:
+                chunk_id = image_chunk.get("chunk_id")
+                if not chunk_id:
+                    continue
+
+                caption_text = image_chunk.get("chunk_text") or image_chunk.get("caption") or ""
+                if not caption_text:
+                    continue
+
+                caption_lower = caption_text.lower()
+                for entity_name, entity in entity_map.items():
+                    frequency = caption_lower.count(entity_name)
+                    if frequency > 0:
+                        relationships.append({
+                            "from_label": NODE_LABELS['CHUNK'],
+                            "from_id_key": PROPERTY_KEYS['CHUNK_ID'],
+                            "from_id_value": str(chunk_id),
+                            "to_label": NODE_LABELS['ENTITY'],
+                            "to_id_key": PROPERTY_KEYS['ENTITY_ID'],
+                            "to_id_value": entity["entity_id"],
+                            "relationship_type": RELATIONSHIP_TYPES['MENTIONS'],
+                            "properties": {
+                                RELATIONSHIP_PROPERTIES['FREQUENCY']: frequency,
+                                RELATIONSHIP_PROPERTIES['IMPORTANCE']: min(0.9, 0.5 + (frequency * 0.1)),
+                                RELATIONSHIP_PROPERTIES['CONTEXT']: 'image',
+                            }
+                        })
+                        image_relationships_count += 1
+
+            if image_relationships_count > 0:
+                logger.info(f"Created {image_relationships_count} entity-image relationships")
         
         return relationships
     
@@ -1366,6 +1451,7 @@ class IngestionPipeline:
         table_chunks: List[ProcessedTable],
         table_chunk_ids: List[UUID],
         image_chunk_ids: List[UUID],
+        image_chunks: Optional[List[Dict[str, Any]]] = None,
         metadata: Optional[Dict[str, Any]] = None,
     ) -> None:
         """
@@ -1384,6 +1470,7 @@ class IngestionPipeline:
             table_chunks: List of processed table chunks
             table_chunk_ids: List of table chunk UUIDs
             image_chunk_ids: List of image chunk UUIDs
+            image_chunks: Optional list of image chunk metadata dicts (text, caption, image_id, metadata)
             metadata: Optional document metadata
         """
         import uuid
@@ -1600,6 +1687,7 @@ class IngestionPipeline:
         logger.debug(f"Added {table_chunks_added} table chunks")
         
         # Add image chunks to the last section
+        image_chunk_lookup = {str(ic.get("chunk_id")): ic for ic in (image_chunks or []) if ic.get("chunk_id")}
         if image_chunk_ids:
             target_section = sections[-1] if sections else None
             if not target_section:
@@ -1610,16 +1698,20 @@ class IngestionPipeline:
                     "chunks": [],
                 }
                 sections.append(target_section)
-            
+        
         image_chunks_added = 0
         for i, image_chunk_id in enumerate(image_chunk_ids):
             try:
+                image_data = image_chunk_lookup.get(str(image_chunk_id), {})
+                chunk_text = image_data.get("chunk_text", "") or ""
+                image_metadata = image_data.get("metadata", {}) or {}
+                chunk_index = image_data.get("chunk_index", len(chunks) + len(table_chunks) + i)
                 target_section["chunks"].append({
                     "chunk_id": str(image_chunk_id),
-                    "chunk_index": len(chunks) + len(table_chunks) + i,
+                    "chunk_index": chunk_index,
                     "chunk_type": "image",
-                    "content": "",  # Image content (caption) stored in Supabase
-                    "metadata": {},
+                    "content": chunk_text[:50000] if len(chunk_text) > 50000 else chunk_text,
+                    "metadata": image_metadata,
                 })
                 image_chunks_added += 1
             except Exception as e:
@@ -1755,8 +1847,12 @@ class IngestionPipeline:
         
         # Extract entities and create entity nodes and relationships
         try:
-            logger.info(f"Extracting entities from {len(chunks)} chunks and {len(table_chunks)} tables...")
-            entities = self._extract_entities_simple(chunks, table_chunks)
+            image_chunks = image_chunks or []
+            logger.info(
+                f"Extracting entities from {len(chunks)} text chunks, "
+                f"{len(table_chunks)} tables, and {len(image_chunks)} images..."
+            )
+            entities = self._extract_entities_simple(chunks, table_chunks, image_chunks)
             
             if entities:
                 logger.info(f"Extracted {len(entities)} unique entities, creating entity nodes...")
@@ -1774,6 +1870,7 @@ class IngestionPipeline:
                     chunk_ids,
                     table_chunks,      # Include table chunks
                     table_chunk_ids,   # Include table chunk IDs
+                    image_chunks,
                     default_section_id
                 )
                 
@@ -1812,6 +1909,14 @@ class IngestionPipeline:
                 logger.info("No entities extracted from document")
         except Exception as e:
             logger.warning(f"Entity extraction/creation failed: {e}. Continuing without entities.", exc_info=True)
+        
+        # Create media nodes and relationships (image chunks -> media -> entities)
+        try:
+            if image_chunks:
+                entities_for_media = entities if 'entities' in locals() and entities else []
+                self._build_media_graph(image_chunks, entities_for_media)
+        except Exception as e:
+            logger.warning(f"Media graph creation failed: {e}. Continuing without media nodes.", exc_info=True)
         
         # Extract topics and create topic nodes
         try:
@@ -1896,6 +2001,97 @@ class IngestionPipeline:
                 logger.info("No topics extracted from document")
         except Exception as e:
             logger.warning(f"Topic extraction/creation failed: {e}. Continuing without topics.", exc_info=True)
+    
+    def _build_media_graph(
+        self,
+        image_chunks: List[Dict[str, Any]],
+        entities: List[Dict[str, Any]],
+    ) -> None:
+        """
+        Create Media nodes for images and connect them to chunks/entities.
+        
+        Args:
+            image_chunks: List of image chunk dictionaries with chunk_id, image_id, captions
+            entities: Entities already extracted/created for this document
+        """
+        if not image_chunks or not self.graph_repo:
+            return
+        
+        from app.repositories.graph_schema import (
+            NODE_LABELS,
+            PROPERTY_KEYS,
+            RELATIONSHIP_TYPES,
+            RELATIONSHIP_PROPERTIES,
+            MEDIA_TYPES,
+        )
+        
+        media_nodes = []
+        has_media_relationships = []
+        describe_relationships = []
+        entity_lookup = {e["entity_name"].lower(): e for e in entities} if entities else {}
+        
+        for image_chunk in image_chunks:
+            chunk_id = image_chunk.get("chunk_id")
+            if not chunk_id:
+                continue
+            
+            media_id = image_chunk.get("image_id") or str(chunk_id)
+            caption_text = image_chunk.get("chunk_text") or image_chunk.get("caption") or ""
+            media_type = (image_chunk.get("media_type") or MEDIA_TYPES["IMAGE"]).upper()
+            
+            media_nodes.append({
+                "media_id": media_id,
+                "media_type": media_type,
+                "media_url": image_chunk.get("image_path"),
+                "caption": caption_text,
+                "alt_text": caption_text[:200] if caption_text else "",
+                "metadata": image_chunk.get("metadata") or {},
+            })
+            
+            has_media_relationships.append({
+                "from_label": NODE_LABELS['CHUNK'],
+                "from_id_key": PROPERTY_KEYS['CHUNK_ID'],
+                "from_id_value": str(chunk_id),
+                "to_label": NODE_LABELS['MEDIA'],
+                "to_id_key": PROPERTY_KEYS['MEDIA_ID'],
+                "to_id_value": media_id,
+                "relationship_type": RELATIONSHIP_TYPES['HAS_MEDIA'],
+                "properties": {
+                    RELATIONSHIP_PROPERTIES['MEDIA_TYPE']: media_type,
+                    RELATIONSHIP_PROPERTIES['RELEVANCE']: 0.85,
+                    RELATIONSHIP_PROPERTIES['POSITION']: "inline",
+                }
+            })
+            
+            if caption_text and entity_lookup:
+                caption_lower = caption_text.lower()
+                for entity_name, entity in entity_lookup.items():
+                    frequency = caption_lower.count(entity_name)
+                    if frequency > 0:
+                        describe_relationships.append({
+                            "from_label": NODE_LABELS['MEDIA'],
+                            "from_id_key": PROPERTY_KEYS['MEDIA_ID'],
+                            "from_id_value": media_id,
+                            "to_label": NODE_LABELS['ENTITY'],
+                            "to_id_key": PROPERTY_KEYS['ENTITY_ID'],
+                            "to_id_value": entity["entity_id"],
+                            "relationship_type": RELATIONSHIP_TYPES['DESCRIBES'],
+                            "properties": {
+                                RELATIONSHIP_PROPERTIES['RELEVANCE']: min(1.0, 0.5 + (0.1 * frequency))
+                            }
+                        })
+        
+        if media_nodes:
+            self.graph_repo.create_media_nodes_batch(media_nodes)
+        if has_media_relationships:
+            self.graph_repo.create_relationships_batch(has_media_relationships)
+        if describe_relationships:
+            self.graph_repo.create_relationships_batch(describe_relationships)
+        
+        logger.info(
+            f"Created {len(media_nodes)} media nodes with "
+            f"{len(has_media_relationships)} HAS_MEDIA and {len(describe_relationships)} DESCRIBES relationships"
+        )
     
     def _generate_image_chunk_text(
         self,

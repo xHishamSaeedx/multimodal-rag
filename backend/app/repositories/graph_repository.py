@@ -32,6 +32,7 @@ from app.utils.metrics import (
     neo4j_transaction_duration_seconds,
 )
 from app.utils.logging import get_logger
+import json
 
 logger = get_logger(__name__)
 
@@ -415,6 +416,84 @@ class GraphRepository:
             neo4j_transactions_total.labels(status="error").inc()
             neo4j_transaction_duration_seconds.observe(query_duration)
             logger.error(f"Failed to create entity nodes: {str(e)}")
+            raise
+        finally:
+            session.close()
+    
+    def create_media_nodes_batch(
+        self,
+        media_items: List[Dict[str, Any]]
+    ) -> None:
+        """
+        Create or merge media nodes (images, tables, charts) in batch.
+        
+        Args:
+            media_items: List of media dictionaries with:
+                {
+                    "media_id": str,
+                    "media_type": str,
+                    "media_url": str,
+                    "caption": str,
+                    "alt_text": str,
+                    "metadata": dict (optional)
+                }
+        """
+        if not media_items:
+            return
+        
+        # Sanitize metadata: Neo4j properties must be primitives; flatten common fields and store full metadata as JSON
+        sanitized_media = []
+        for item in media_items:
+            meta = item.get("metadata") or {}
+            sanitized_media.append({
+                "media_id": item.get("media_id"),
+                "media_type": item.get("media_type"),
+                "media_url": item.get("media_url"),
+                "caption": item.get("caption"),
+                "alt_text": item.get("alt_text"),
+                "width": meta.get("width"),
+                "height": meta.get("height"),
+                "page": meta.get("page"),
+                "image_type_meta": meta.get("image_type"),
+                "metadata_json": json.dumps(meta) if meta else None,
+            })
+        
+        query = f"""
+        UNWIND $media AS item
+        MERGE (m:{NODE_LABELS['MEDIA']} {{{PROPERTY_KEYS['MEDIA_ID']}: item.media_id}})
+        SET m.{PROPERTY_KEYS['MEDIA_TYPE']} = COALESCE(item.media_type, 'IMAGE'),
+            m.{PROPERTY_KEYS['MEDIA_URL']} = COALESCE(item.media_url, ''),
+            m.{PROPERTY_KEYS['CAPTION']} = COALESCE(item.caption, ''),
+            m.{PROPERTY_KEYS['ALT_TEXT']} = COALESCE(item.alt_text, '')
+        FOREACH(ignore IN CASE WHEN item.width IS NULL THEN [] ELSE [1] END | SET m.width = item.width)
+        FOREACH(ignore IN CASE WHEN item.height IS NULL THEN [] ELSE [1] END | SET m.height = item.height)
+        FOREACH(ignore IN CASE WHEN item.page IS NULL THEN [] ELSE [1] END | SET m.page = item.page)
+        FOREACH(ignore IN CASE WHEN item.image_type_meta IS NULL THEN [] ELSE [1] END | SET m.image_type = item.image_type_meta)
+        FOREACH(ignore IN CASE WHEN item.metadata_json IS NULL THEN [] ELSE [1] END | SET m.metadata_json = item.metadata_json)
+        """
+        
+        query_start = time.time()
+        driver = self._get_driver()
+        session = driver.session(database=self.database)
+        try:
+            with session.begin_transaction() as tx:
+                tx.run(query, media=sanitized_media)
+                tx.commit()
+            
+            query_duration = time.time() - query_start
+            neo4j_query_duration_seconds.labels(operation="create_media").observe(query_duration)
+            neo4j_queries_total.labels(operation="create_media", status="success").inc()
+            neo4j_nodes_created_total.labels(node_type="Media").inc(len(media_items))
+            neo4j_transactions_total.labels(status="success").inc()
+            neo4j_transaction_duration_seconds.observe(query_duration)
+            
+            logger.info(f"Created/merged {len(media_items)} media nodes in batch")
+        except Exception as e:
+            query_duration = time.time() - query_start
+            neo4j_queries_total.labels(operation="create_media", status="error").inc()
+            neo4j_transactions_total.labels(status="error").inc()
+            neo4j_transaction_duration_seconds.observe(query_duration)
+            logger.error(f"Failed to create media nodes: {str(e)}")
             raise
         finally:
             session.close()
