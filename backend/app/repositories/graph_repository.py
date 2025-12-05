@@ -996,6 +996,21 @@ class GraphRepository:
                 if media_deleted > 0:
                     logger.info(f"Deleted {media_deleted} orphaned media nodes")
             
+            # Step 5b: Delete completely disconnected media nodes (no relationships at all)
+            # This handles media nodes that were created but never linked due to bugs
+            disconnected_media_query = f"""
+            MATCH (m:{NODE_LABELS['MEDIA']})
+            WHERE NOT (m)--()
+            DETACH DELETE m
+            RETURN count(m) AS deleted_count
+            """
+            result = session.run(disconnected_media_query)
+            record = result.single()
+            disconnected_media_deleted = record["deleted_count"] if record else 0
+            if disconnected_media_deleted > 0:
+                logger.info(f"Deleted {disconnected_media_deleted} completely disconnected media nodes")
+                media_deleted += disconnected_media_deleted
+            
             # Step 6: Delete all sections for this document
             sections_query = f"""
             MATCH (d:{NODE_LABELS['DOCUMENT']} {{{PROPERTY_KEYS['DOCUMENT_ID']}: $document_id}})

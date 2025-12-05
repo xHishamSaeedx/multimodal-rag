@@ -379,6 +379,8 @@ async def delete_document(
                     parts = [f"{deletion_counts.get('chunks_deleted', 0)} chunks"]
                     if deletion_counts.get('sections_deleted', 0) > 0:
                         parts.append(f"{deletion_counts.get('sections_deleted', 0)} sections")
+                    if deletion_counts.get('media_deleted', 0) > 0:
+                        parts.append(f"{deletion_counts.get('media_deleted', 0)} media nodes")
                     if deletion_counts.get('orphaned_entities_deleted', 0) > 0:
                         parts.append(f"{deletion_counts.get('orphaned_entities_deleted', 0)} orphaned entities")
                     if deletion_counts.get('orphaned_topics_deleted', 0) > 0:
