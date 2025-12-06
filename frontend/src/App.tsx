@@ -1,28 +1,32 @@
-import React from 'react';
+import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
 import Header from './components/Header';
 import Hero from './components/Hero';
 import About from './components/About';
-import DocumentUpload from './components/DocumentUpload';
-import DocumentList from './components/DocumentList';
-import Chat from './components/Chat';
+import ChatPage from './components/ChatPage';
+import Documents from './components/Documents';
 import './App.css';
+
+function HomePage() {
+  return (
+    <>
+      <Hero />
+      <About />
+    </>
+  );
+}
 
 function App() {
   return (
-    <div className="App">
-      <Header />
-      <Hero />
-      <About />
-      <section id="upload" className="upload-section">
-        <DocumentUpload />
-      </section>
-      <section id="chat" className="chat-section">
-        <Chat />
-      </section>
-      <section id="documents" className="documents-section">
-        <DocumentList />
-      </section>
-    </div>
+    <Router>
+      <div className="App">
+        <Header />
+        <Routes>
+          <Route path="/" element={<HomePage />} />
+          <Route path="/documents" element={<Documents />} />
+          <Route path="/chat" element={<ChatPage />} />
+        </Routes>
+      </div>
+    </Router>
   );
 }
 

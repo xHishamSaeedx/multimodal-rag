@@ -1,6 +1,5 @@
 import React, { useState, useEffect } from 'react';
 import { api, DocumentInfo } from '../services/api';
-import './DocumentList.css';
 
 const DocumentList: React.FC = () => {
   const [documents, setDocuments] = useState<DocumentInfo[]>([]);

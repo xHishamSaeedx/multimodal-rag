@@ -29,7 +29,7 @@ const Chat: React.FC = () => {
   const [expandedSources, setExpandedSources] = useState<Set<string>>(new Set());
   const messagesContainerRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
-  const refreshTimersRef = useRef<Map<string, NodeJS.Timeout>>(new Map());
+  const refreshTimersRef = useRef<Map<string, number>>(new Map());
   
   // Retriever configuration state
   const [enableSparse, setEnableSparse] = useState(true);
@@ -454,7 +454,7 @@ const Chat: React.FC = () => {
                   </button>
                   {expandedSources.has(message.id) && (
                     <div className="sources-content">
-                      {message.sources.map((source, index) => {
+                      {message.sources.map((source, _index) => {
                     const hasImage = source.image_path && source.image_url;
                     const imageKey = source.image_path || '';
                     const imageState = imageKey ? imageStates.get(imageKey) : null;

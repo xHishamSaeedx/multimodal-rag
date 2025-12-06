@@ -1,6 +1,5 @@
 import React, { useState, useCallback, useRef, useEffect } from 'react';
 import { api, IngestResponse } from '../services/api';
-import './DocumentUpload.css';
 
 interface UploadResult extends IngestResponse {
   file?: File;

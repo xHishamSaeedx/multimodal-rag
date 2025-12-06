@@ -1,55 +1,39 @@
 import React from 'react';
+import { Link, useLocation } from 'react-router-dom';
 import './Header.css';
 
 const Header: React.FC = () => {
-  const scrollToSection = (id: string) => {
-    const element = document.getElementById(id);
-    if (element) {
-      element.scrollIntoView({ behavior: 'smooth', block: 'start' });
-    }
-  };
+  const location = useLocation();
 
   return (
     <header className="header">
       <div className="header-container">
-        <div className="logo">
+        <Link to="/" className="logo">
           <svg className="logo-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
             <circle cx="11" cy="11" r="8"></circle>
             <path d="m21 21-4.35-4.35"></path>
           </svg>
           <span className="logo-text">Multimodal RAG</span>
-        </div>
+        </Link>
         <nav className="nav">
-          <button 
-            className="nav-link" 
-            onClick={() => scrollToSection('hero')}
+          <Link
+            to="/"
+            className={`nav-link ${location.pathname === '/' ? 'active' : ''}`}
           >
             Home
-          </button>
-          <button 
-            className="nav-link" 
-            onClick={() => scrollToSection('about')}
-          >
-            About
-          </button>
-          <button 
-            className="nav-link" 
-            onClick={() => scrollToSection('upload')}
-          >
-            Upload
-          </button>
-          <button 
-            className="nav-link" 
-            onClick={() => scrollToSection('chat')}
-          >
-            Chat
-          </button>
-          <button 
-            className="nav-link" 
-            onClick={() => scrollToSection('documents')}
+          </Link>
+          <Link
+            to="/documents"
+            className={`nav-link ${location.pathname === '/documents' ? 'active' : ''}`}
           >
             Documents
-          </button>
+          </Link>
+          <Link
+            to="/chat"
+            className={`nav-link ${location.pathname === '/chat' ? 'active' : ''}`}
+          >
+            Chat
+          </Link>
         </nav>
       </div>
     </header>
