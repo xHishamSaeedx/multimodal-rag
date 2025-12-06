@@ -1,8 +1,9 @@
 """
 Application configuration.
 
-This module loads and validates environment variables and application settings.
+This module loads and validates settings from config.yaml and environment variables.
 """
+import yaml
 from pathlib import Path
 from pydantic_settings import BaseSettings
 from typing import Optional
@@ -10,86 +11,158 @@ from typing import Optional
 
 # Get the backend directory (parent of app directory)
 BACKEND_DIR = Path(__file__).parent.parent.parent
+CONFIG_FILE = BACKEND_DIR / "config.yaml"
 ENV_FILE = BACKEND_DIR / ".env"
 
 
+def load_config_yaml() -> dict:
+    """Load configuration from config.yaml file."""
+    if CONFIG_FILE.exists():
+        with open(CONFIG_FILE, 'r', encoding='utf-8') as f:
+            return yaml.safe_load(f) or {}
+    return {}
+
+
 class Settings(BaseSettings):
-    """Application settings loaded from environment variables."""
-    
+    """Application settings loaded from config.yaml and environment variables."""
+
+    def __init__(self, **kwargs):
+        # Load config from YAML file
+        config_data = load_config_yaml()
+
+        # Set defaults from config.yaml where available
+        # API Settings
+        kwargs.setdefault('api_title', config_data.get('api', {}).get('title', "Multimodal RAG API"))
+        kwargs.setdefault('api_version', config_data.get('api', {}).get('version', "1.0.0"))
+        kwargs.setdefault('api_description', config_data.get('api', {}).get('description', "API for Multimodal Retrieval-Augmented Generation"))
+
+        # Server Settings
+        kwargs.setdefault('host', config_data.get('api', {}).get('host', "0.0.0.0"))
+        kwargs.setdefault('port', config_data.get('api', {}).get('port', 8000))
+
+        # CORS Settings
+        kwargs.setdefault('cors_origins', config_data.get('api', {}).get('cors_origins', ["http://localhost:3000", "http://localhost:5173"]))
+
+        # Environment
+        kwargs.setdefault('environment', config_data.get('app', {}).get('environment', "development"))
+
+        # MinIO Settings
+        minio_config = config_data.get('minio', {})
+        kwargs.setdefault('minio_endpoint', minio_config.get('endpoint', "localhost:9000"))
+        kwargs.setdefault('minio_bucket_name', minio_config.get('bucket_name', "raw-documents"))
+        kwargs.setdefault('minio_use_ssl', minio_config.get('use_ssl', False))
+        kwargs.setdefault('minio_region', minio_config.get('region'))
+
+        # Qdrant Settings
+        qdrant_config = config_data.get('qdrant', {})
+        kwargs.setdefault('qdrant_host', qdrant_config.get('host', "localhost"))
+        kwargs.setdefault('qdrant_port', qdrant_config.get('port', 6333))
+        kwargs.setdefault('qdrant_grpc_port', qdrant_config.get('grpc_port', 6334))
+        kwargs.setdefault('qdrant_collection_name', "text_chunks")  # Keep as text_chunks
+        kwargs.setdefault('qdrant_vector_size', qdrant_config.get('collections', {}).get('text_chunks', {}).get('vector_size', 768))
+        kwargs.setdefault('qdrant_timeout', qdrant_config.get('timeout', 30))
+
+        # Elasticsearch Settings
+        es_config = config_data.get('elasticsearch', {})
+        kwargs.setdefault('elasticsearch_url', es_config.get('url', "http://localhost:9200"))
+        kwargs.setdefault('elasticsearch_index_name', es_config.get('index_name', "chunks"))
+        kwargs.setdefault('elasticsearch_timeout', es_config.get('timeout', 30))
+
+        # Embedding Settings
+        embedding_config = config_data.get('embeddings', {})
+        kwargs.setdefault('embedding_model', embedding_config.get('model', "intfloat/e5-base-v2"))
+        kwargs.setdefault('embedding_device', embedding_config.get('device', "cpu"))
+        kwargs.setdefault('embedding_batch_size', embedding_config.get('batch_size', 32))
+
+        # Vision Processing Settings
+        vision_config = config_data.get('vision', {})
+        kwargs.setdefault('vision_processing_mode', vision_config.get('processing_mode', "captioning"))
+        kwargs.setdefault('vision_llm_provider', vision_config.get('llm_provider', "openai"))
+        kwargs.setdefault('vision_llm_model', vision_config.get('llm_model', "gpt-4o"))
+        kwargs.setdefault('captioning_model', vision_config.get('captioning_model', "Salesforce/blip-image-captioning-base"))
+
+        # Neo4j Settings
+        neo4j_config = config_data.get('neo4j', {})
+        kwargs.setdefault('neo4j_enabled', neo4j_config.get('enabled', True))
+        kwargs.setdefault('neo4j_uri', neo4j_config.get('uri', "bolt://localhost:7687"))
+        kwargs.setdefault('neo4j_user', neo4j_config.get('user', "neo4j"))
+        kwargs.setdefault('neo4j_database', neo4j_config.get('database', "neo4j"))
+        kwargs.setdefault('neo4j_timeout', neo4j_config.get('timeout', 30))
+        kwargs.setdefault('neo4j_max_connection_pool_size', neo4j_config.get('max_connection_pool_size', 50))
+
+        # Initialize with merged kwargs
+        super().__init__(**kwargs)
+
     # API Settings
-    api_title: str = "Multimodal RAG API"
-    api_version: str = "1.0.0"
-    api_description: str = "API for Multimodal Retrieval-Augmented Generation"
-    
+    api_title: str
+    api_version: str
+    api_description: str
+
     # Server Settings
-    host: str = "0.0.0.0"
-    port: int = 8000
+    host: str
+    port: int
     debug: bool = False
-    
+
     # CORS Settings
-    cors_origins: list[str] = ["http://localhost:3000", "http://localhost:5173"]
-    
+    cors_origins: list[str]
+
     # Environment
-    environment: str = "development"
-    
-    # MinIO (S3-compatible) Settings
-    minio_endpoint: str = "localhost:9000"
+    environment: str
+
+    # MinIO (S3-compatible) Settings - access/secret keys still from env
+    minio_endpoint: str
     minio_access_key: str = "admin"
     minio_secret_key: str = "admin12345"
-    minio_bucket_name: str = "raw-documents"
-    minio_use_ssl: bool = False
-    minio_region: Optional[str] = None
-    
-    # Supabase (PostgreSQL) Settings
+    minio_bucket_name: str
+    minio_use_ssl: bool
+    minio_region: Optional[str]
+
+    # Supabase (PostgreSQL) Settings - all from env
     supabase_url: Optional[str] = None
     supabase_anon_key: Optional[str] = None
     supabase_service_role_key: Optional[str] = None
-    
+
     # Qdrant (Vector DB) Settings
-    qdrant_host: str = "localhost"
-    qdrant_port: int = 6333
-    qdrant_grpc_port: int = 6334
-    qdrant_collection_name: str = "text_chunks"
-    qdrant_vector_size: int = 768  # e5-base-v2 uses 768 dimensions
-    qdrant_timeout: int = 30
-    
+    qdrant_host: str
+    qdrant_port: int
+    qdrant_grpc_port: int
+    qdrant_collection_name: str
+    qdrant_vector_size: int
+    qdrant_timeout: int
+
     # Elasticsearch (BM25 Sparse Index) Settings
-    elasticsearch_url: str = "http://localhost:9200"
-    elasticsearch_index_name: str = "chunks"
-    elasticsearch_timeout: int = 30
-    
+    elasticsearch_url: str
+    elasticsearch_index_name: str
+    elasticsearch_timeout: int
+
     # Embedding Settings
-    embedding_model: str = "intfloat/e5-base-v2"  # Recommended model (768 dim)
-    embedding_device: str = "cpu"  # "cpu" or "cuda"
-    embedding_batch_size: int = 32
-    
-    # Groq Settings (for Answer Generation)
+    embedding_model: str
+    embedding_device: str
+    embedding_batch_size: int
+
+    # Groq Settings (for Answer Generation) - API key and model from env
     groq_api_key: Optional[str] = None
-    groq_model: Optional[str] = None  # Will be loaded from env file
-    
+    groq_model: Optional[str] = None
+
     # Vision Processing Settings
-    vision_processing_mode: str = "captioning"  # "captioning" or "vision_llm"
-    vision_llm_provider: str = "openai"  # "openai" or "google"
-    vision_llm_model: str = "gpt-4o"  # Model name (OpenAI: gpt-4o or gpt-4o-mini, Google: gemini-1.5-pro or gemini-1.5-flash)
-    captioning_model: str = "Salesforce/blip-image-captioning-base"  # BLIP model for captioning
-    
-    # Vision LLM API Keys
-    openai_api_key: Optional[str] = None  # Required when vision_llm_provider="openai"
-    google_api_key: Optional[str] = None  # Required when vision_llm_provider="google"
-    
-    # Note: These can be overridden via environment variables:
-    # VISION_PROCESSING_MODE, VISION_LLM_PROVIDER, VISION_LLM_MODEL, CAPTIONING_MODEL
-    # OPENAI_API_KEY, GOOGLE_API_KEY
-    
-    # Neo4j (Knowledge Graph) Settings
-    neo4j_uri: str = "bolt://localhost:7687"  # Use 'bolt://neo4j:7687' when backend runs in Docker
-    neo4j_user: str = "neo4j"
-    neo4j_password: str = "neo4j-password"  # Should be loaded from .env
-    neo4j_database: str = "neo4j"  # Default database (use 'neo4j' or specific database name)
-    neo4j_timeout: int = 30  # Connection timeout in seconds
-    neo4j_max_connection_pool_size: int = 50  # Connection pool size
-    neo4j_enabled: bool = True  # Feature flag to enable/disable Neo4j
-    
+    vision_processing_mode: str
+    vision_llm_provider: str
+    vision_llm_model: str
+    captioning_model: str
+
+    # Vision LLM API Keys - from env
+    openai_api_key: Optional[str] = None
+    google_api_key: Optional[str] = None
+
+    # Neo4j (Knowledge Graph) Settings - password from env
+    neo4j_uri: str
+    neo4j_user: str
+    neo4j_password: str = "neo4j-password"
+    neo4j_database: str
+    neo4j_timeout: int
+    neo4j_max_connection_pool_size: int
+    neo4j_enabled: bool
+
     # Observability Settings (Optional)
     loki_enabled: bool = False  # Whether to push logs directly to Loki (optional, Promtail handles collection)
     loki_url: str = "http://localhost:3100"  # Loki API URL

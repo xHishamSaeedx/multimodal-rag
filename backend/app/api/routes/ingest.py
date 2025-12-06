@@ -48,6 +48,7 @@ async def ingest_document(
     enable_text: str = Form("true"),
     enable_tables: str = Form("true"),
     enable_images: str = Form("true"),
+    enable_graph: str = Form("true"),
 ) -> IngestResponse:
     """
     Upload and extract text from a document.
@@ -131,9 +132,11 @@ async def ingest_document(
             enable_text_raw=enable_text,
             enable_tables_raw=enable_tables,
             enable_images_raw=enable_images,
+            enable_graph_raw=enable_graph,
             enable_text_type=type(enable_text).__name__,
             enable_tables_type=type(enable_tables).__name__,
             enable_images_type=type(enable_images).__name__,
+            enable_graph_type=type(enable_graph).__name__,
         )
         
         # Convert form string values to proper booleans
@@ -159,6 +162,7 @@ async def ingest_document(
         enable_text = str_to_bool(enable_text)
         enable_tables = str_to_bool(enable_tables)
         enable_images = str_to_bool(enable_images)
+        enable_graph = str_to_bool(enable_graph)
         
         # Warn if all processing is disabled
         if not enable_text and not enable_tables and not enable_images:
@@ -174,6 +178,7 @@ async def ingest_document(
             enable_text=enable_text,
             enable_tables=enable_tables,
             enable_images=enable_images,
+            enable_graph=enable_graph,
             file_name=file_name,
         )
         
@@ -199,6 +204,7 @@ async def ingest_document(
             enable_text=enable_text,
             enable_tables=enable_tables,
             enable_images=enable_images,
+            enable_graph=enable_graph,
         )
         
         result = pipeline.ingest_document(

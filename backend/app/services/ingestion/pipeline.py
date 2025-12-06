@@ -72,10 +72,11 @@ class IngestionPipeline:
         enable_text: bool = True,
         enable_tables: bool = True,
         enable_images: bool = True,
+        enable_graph: bool = True,
     ):
         """
         Initialize the ingestion pipeline.
-        
+
         Args:
             chunk_size: Target chunk size in tokens (default: 800)
             chunk_overlap: Overlap size in tokens (default: 150)
@@ -85,10 +86,12 @@ class IngestionPipeline:
             enable_text: Whether to process text (default: True)
             enable_tables: Whether to process tables (default: True)
             enable_images: Whether to process images (default: True)
+            enable_graph: Whether to build knowledge graph (default: True)
         """
         self.enable_text = enable_text
         self.enable_tables = enable_tables
         self.enable_images = enable_images
+        self.enable_graph = enable_graph
         
         self.extractor = TextExtractor()  # Keep for backward compatibility
         self.extraction_runner = ExtractionRunner(
@@ -707,8 +710,8 @@ class IngestionPipeline:
                 )
                 logger.info(f"✓ Indexed {len(processed_tables)} table chunks in Elasticsearch (BM25)")
             
-            # Step 8: Build knowledge graph (if Neo4j is enabled)
-            if self.graph_repo and settings.neo4j_enabled:
+            # Step 8: Build knowledge graph (if Neo4j is enabled and graph building is requested)
+            if self.graph_repo and settings.neo4j_enabled and self.enable_graph:
                 try:
                     logger.info(f"Step 8: Building knowledge graph for document {document_id}")
                     self._build_document_graph(
@@ -733,7 +736,7 @@ class IngestionPipeline:
                     )
                     logger.warning("Continuing without graph. Document will be available for vector/sparse search but not graph queries.")
             else:
-                logger.info("Step 8: Skipping knowledge graph (Neo4j disabled or not available)")
+                logger.info("Step 8: Skipping knowledge graph (Neo4j disabled, not available, or graph building disabled)")
             
             total_chunks = len(chunks) + len(processed_tables) + len(image_ids)
             logger.info(

@@ -1,0 +1,145 @@
+# ============================================
+# Multimodal RAG Configuration
+# ============================================
+# Comprehensive configuration file for the Multimodal RAG system
+# This outlines all services, models, and settings used in the application
+
+# Application Metadata
+app:
+  name: multimodal-rag
+  version: "1.0.0"
+  environment: development # Options: development, staging, production
+
+# ============================================
+# Data Storage Layer
+# ============================================
+
+# Vector Database - Qdrant
+qdrant:
+  host: localhost
+  port: 6333
+  grpc_port: 6334
+  timeout: 30
+  # Multiple collections created by init_qdrant.py
+  collections:
+    text_chunks:
+      vector_size: 768 # e5-base-v2 dimensions
+    table_chunks:
+      vector_size: 768 # Same as text embeddings
+    image_chunks:
+      vector_size: 512 # CLIP base (can be 768 for SigLIP base or 1024 for SigLIP large)
+
+# BM25 Sparse Index - Elasticsearch
+elasticsearch:
+  url: http://localhost:9200
+  index_name: rag_chunks
+  timeout: 30
+  # BM25 similarity tuning parameters
+  similarity:
+    k1: 1.2
+    b: 0.75
+
+# Raw Data Lake - MinIO (S3-compatible)
+minio:
+  endpoint: localhost:9000
+  bucket_name: raw-documents
+  use_ssl: false # Set to true in production with SSL configured
+  region: null # Optional region setting
+
+# ============================================
+# AI/ML Models Configuration
+# ============================================
+
+# Large Language Models (LLMs)
+llms:
+  # Primary LLM for answer generation (configurable provider)
+  primary_provider: groq # Options: groq, openai, anthropic, ollama
+
+  # Provider-specific configurations (API keys loaded from environment)
+  groq:
+    api_key: ${GROQ_API_KEY} # From environment variable
+    model: openai/gpt-oss-20b
+
+  openai:
+    api_key: ${OPENAI_API_KEY} # From environment variable
+    model: gpt-4-turbo-preview
+
+  # Alternative providers (commented out)
+  # anthropic:
+  #   api_key: ${ANTHROPIC_API_KEY}
+  #   model: claude-3-opus-20240229
+  #
+  # ollama:
+  #   base_url: http://localhost:11434
+  #   model: llama2
+
+# Text Embedding Models
+embeddings:
+  model: intfloat/e5-base-v2
+  dimension: 768 # Embedding vector size
+  device: cuda # Options: cpu, cuda
+  batch_size: 32 # Batch size for embedding generation
+
+# ============================================
+# Vision Processing
+# ============================================
+vision:
+  processing_mode: captioning # Options: captioning, vision_llm
+
+  # Vision LLM Configuration (when processing_mode = vision_llm)
+  llm_provider: openai # Options: openai, google
+  llm_model: gpt-4o # OpenAI: gpt-4o, gpt-4o-mini; Google: gemini-1.5-pro, gemini-1.5-flash
+
+  # Captioning Model (when processing_mode = captioning)
+  captioning_model: Salesforce/blip-image-captioning-base
+
+# ============================================
+# API Configuration
+# ============================================
+api:
+  host: 0.0.0.0
+  port: 8000
+  reload: true # Set to false in production
+  title: "Multimodal RAG API"
+  version: "1.0.0"
+  description: "API for Multimodal Retrieval-Augmented Generation"
+  cors_origins: ["http://localhost:3000", "http://localhost:5173"] # Frontend URLs
+
+# ============================================
+# Retrieval & Chunking Configuration
+# ============================================
+retrieval:
+  # Number of chunks to retrieve from each index
+  top_k_sparse: 50 # BM25 (Elasticsearch)
+  top_k_dense: 50 # Dense vectors (Qdrant)
+  # Final number after merging and reranking
+  top_n_final: 10
+
+chunking:
+  size: 64 # Chunk size in tokens/characters
+  overlap: 20 # Overlap between chunks
+
+# ============================================
+# Logging Configuration
+# ============================================
+logging:
+  level: INFO # Options: DEBUG, INFO, WARNING, ERROR, CRITICAL
+  file: logs/app.log # Set to empty string to disable file logging
+
+# Structured Logging - Logstash
+logstash:
+  enabled: true
+  host: localhost
+  port: 5000
+  protocol: tcp
+
+# ============================================
+# Knowledge Graph (Neo4j)
+# ============================================
+neo4j:
+  enabled: true
+  uri: bolt://localhost:7687 # Use bolt://neo4j:7687 when backend runs in Docker
+  user: neo4j
+  database: neo4j
+  timeout: 30 # Connection timeout in seconds
+  max_connection_pool_size: 50 # Connection pool size
