@@ -12,8 +12,8 @@ Order of operations:
 5. MinIO - Raw data lake
 
 Usage:
-    python backend/scripts/clean_slate.py
-    python backend/scripts/clean_slate.py --confirm  # Skips all confirmation prompts
+    python backend/scripts/pipeline_ops/clean_slate.py
+    python backend/scripts/pipeline_ops/clean_slate.py --confirm  # Skips all confirmation prompts
 """
 
 import sys
@@ -62,7 +62,7 @@ def cleanup_supabase(confirm: bool = False) -> bool:
     """
     Clear all data from Supabase tables.
 
-    Based on: backend/scripts/cleanup_supabase.py pattern
+    Based on: backend/scripts/supabase/cleanup_supabase.py pattern
     """
     print("\n" + "="*60)
     print("🗂️  PHASE 1: Clearing Supabase (PostgreSQL)")
@@ -199,7 +199,7 @@ def cleanup_neo4j(confirm: bool = False) -> bool:
     """
     Clear all nodes and relationships from Neo4j.
 
-    Based on: backend/scripts/cleanup_neo4j.py pattern
+    Based on: backend/scripts/neo4j/cleanup_neo4j.py pattern
     """
     print("\n" + "="*60)
     print("🕸️  PHASE 3: Clearing Neo4j Knowledge Graph")
@@ -245,7 +245,7 @@ def cleanup_qdrant(confirm: bool = False) -> bool:
     """
     Delete all Qdrant collections.
 
-    Based on: scripts/init_qdrant.py pattern
+    Based on: backend/scripts/qdrant/init_qdrant.py pattern
     """
     print("\n" + "="*60)
     print("🔗 PHASE 4: Clearing Qdrant Collections")
@@ -390,7 +390,7 @@ def run_clean_slate(confirm: bool = False) -> bool:
 
     print("-"*60)
     print(f"Completed: {successful}/{len(phases)} phases")
-    print(".1f"
+    print(f"Time taken: {elapsed:.1f} seconds")
     if successful == len(phases):
         print("🎉 CLEAN SLATE RECONSTRUCTION COMPLETED SUCCESSFULLY!")
         print("   You can now run initialization scripts to rebuild the system.")
@@ -411,13 +411,13 @@ def main():
         epilog="""
 Examples:
   # Interactive mode (with confirmations)
-  python backend/scripts/clean_slate.py
+  python backend/scripts/pipeline_ops/clean_slate.py
 
   # Automated mode (skip all confirmations)
-  python backend/scripts/clean_slate.py --confirm
+  python backend/scripts/pipeline_ops/clean_slate.py --confirm
 
   # Show what would be cleaned without doing it
-  python backend/scripts/clean_slate.py --dry-run
+  python backend/scripts/pipeline_ops/clean_slate.py --dry-run
         """
     )
 

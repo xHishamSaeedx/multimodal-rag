@@ -89,19 +89,19 @@ Create additional collections for multimodal embeddings:
 1. Initialize table collection:
 
    ```bash
-   python scripts/init_qdrant.py --collection table_chunks --vector-size 768
+   python backend/scripts/qdrant/init_qdrant.py --collection table_chunks --vector-size 768
    ```
 
 2. Initialize image collection (CLIP - 512 dim):
 
    ```bash
-   python scripts/init_qdrant.py --collection image_chunks --vector-size 512
+   python backend/scripts/qdrant/init_qdrant.py --collection image_chunks --vector-size 512
    ```
 
    Or for SigLIP (768 dim, better quality):
 
    ```bash
-   python scripts/init_qdrant.py --collection image_chunks --vector-size 768
+   python backend/scripts/qdrant/init_qdrant.py --collection image_chunks --vector-size 768
    ```
 
 #### Extended Sparse Index (Elasticsearch)

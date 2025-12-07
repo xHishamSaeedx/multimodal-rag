@@ -115,10 +115,10 @@ Phase 1 establishes the foundational infrastructure and implements a minimal via
 
   4. Initialize the collection:
      ```bash
-     python scripts/init_qdrant.py
+     python backend/scripts/qdrant/init_qdrant.py
      ```
      - Default: Creates `text_chunks` collection with **768 dimensions** (for e5-base-v2/all-mpnet-base-v2 - best quality)
-     - For 384 dimensions (faster): `python scripts/init_qdrant.py --vector-size 384`
+     - For 384 dimensions (faster): `python backend/scripts/qdrant/init_qdrant.py --vector-size 384`
      - See `scripts/README.md` for more options
      - **Performance**: 768 dimensions supports sub-second retrieval (< 200-300ms)
 
@@ -651,7 +651,7 @@ All services are on the `rag-network` Docker network and can communicate using t
 
 - [ ] Create database tables in Supabase SQL Editor (see schema above)
 - [ ] Install Python dependencies: `pip install qdrant-client elasticsearch`
-- [ ] Initialize Qdrant collection: `python scripts/init_qdrant.py`
+- [ ] Initialize Qdrant collection: `python backend/scripts/qdrant/init_qdrant.py`
 - [ ] Initialize Elasticsearch index: `python scripts/init_elasticsearch.py`
 
 ### First Milestone

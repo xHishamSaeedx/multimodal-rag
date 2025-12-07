@@ -20,7 +20,7 @@ qdrant:
   port: 6333
   grpc_port: 6334
   timeout: 30
-  # Multiple collections created by init_qdrant.py
+  # Multiple collections created by backend/scripts/qdrant/init_qdrant.py
   collections:
     text_chunks:
       vector_size: 768 # e5-base-v2 dimensions

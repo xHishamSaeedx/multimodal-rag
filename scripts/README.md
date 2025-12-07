@@ -135,19 +135,19 @@ The initialization script supports creating collections for Phase 1 (text-only) 
 ```bash
 # Default setup (768 dimensions for e5-base-v2/all-mpnet-base-v2 - best quality, recommended)
 # Supports sub-second retrieval (< 200-300ms)
-python scripts/init_qdrant.py
+python backend/scripts/qdrant/init_qdrant.py
 
 # Or explicitly specify collection
-python scripts/init_qdrant.py --collection text_chunks
+python backend/scripts/qdrant/init_qdrant.py --collection text_chunks
 
 # For 384 dimensions (all-MiniLM-L6-v2 - faster embedding generation)
-python scripts/init_qdrant.py --collection text_chunks --vector-size 384
+python backend/scripts/qdrant/init_qdrant.py --collection text_chunks --vector-size 384
 
 # Recreate collection (if you need to reset)
-python scripts/init_qdrant.py --collection text_chunks --recreate
+python backend/scripts/qdrant/init_qdrant.py --collection text_chunks --recreate
 
 # Custom Qdrant URL
-python scripts/init_qdrant.py --collection text_chunks --url http://localhost:6333
+python backend/scripts/qdrant/init_qdrant.py --collection text_chunks --url http://localhost:6333
 ```
 
 #### Phase 2: Multimodal RAG (Tables & Images)
@@ -157,23 +157,23 @@ python scripts/init_qdrant.py --collection text_chunks --url http://localhost:63
 ```bash
 # Create table_chunks and image_chunks collections
 # Uses 768 dim for tables, 512 dim for images (CLIP base)
-python scripts/init_qdrant.py --multimodal
+python backend/scripts/qdrant/init_qdrant.py --multimodal
 
 # Use SigLIP (768 dimensions) for images instead
-python scripts/init_qdrant.py --multimodal --image-vector-size 768
+python backend/scripts/qdrant/init_qdrant.py --multimodal --image-vector-size 768
 ```
 
 **Create individual Phase 2 collections**:
 
 ```bash
 # Create table_chunks collection (768 dimensions)
-python scripts/init_qdrant.py --collection table_chunks --vector-size 768
+python backend/scripts/qdrant/init_qdrant.py --collection table_chunks --vector-size 768
 
 # Create image_chunks collection with CLIP base (512 dimensions)
-python scripts/init_qdrant.py --collection image_chunks --vector-size 512
+python backend/scripts/qdrant/init_qdrant.py --collection image_chunks --vector-size 512
 
 # Create image_chunks collection with SigLIP (768 dimensions)
-python scripts/init_qdrant.py --collection image_chunks --vector-size 768
+python backend/scripts/qdrant/init_qdrant.py --collection image_chunks --vector-size 768
 ```
 
 **Create all collections (Phase 1 + Phase 2)**:
@@ -181,13 +181,13 @@ python scripts/init_qdrant.py --collection image_chunks --vector-size 768
 ```bash
 # Create text_chunks, table_chunks, and image_chunks
 # Uses 768 dim for text/tables, 512 dim for images (CLIP base)
-python scripts/init_qdrant.py --all
+python backend/scripts/qdrant/init_qdrant.py --all
 
 # Customize vector sizes
-python scripts/init_qdrant.py --all --vector-size 768 --image-vector-size 512
+python backend/scripts/qdrant/init_qdrant.py --all --vector-size 768 --image-vector-size 512
 
 # Recreate all collections
-python scripts/init_qdrant.py --all --recreate
+python backend/scripts/qdrant/init_qdrant.py --all --recreate
 ```
 
 #### Verify Collections
@@ -196,7 +196,7 @@ python scripts/init_qdrant.py --all --recreate
 
 ```bash
 # Verify all collections exist and have correct dimensions
-python scripts/init_qdrant.py --verify
+python backend/scripts/qdrant/init_qdrant.py --verify
 ```
 
 This will show:
@@ -210,33 +210,33 @@ This will show:
 **Scenario 1: Starting fresh (Phase 1 + Phase 2)**
 ```bash
 # Create all collections at once
-python scripts/init_qdrant.py --all
+python backend/scripts/qdrant/init_qdrant.py --all
 ```
 
 **Scenario 2: Adding Phase 2 to existing Phase 1 setup**
 ```bash
 # Only create Phase 2 collections (text_chunks already exists)
-python scripts/init_qdrant.py --multimodal
+python backend/scripts/qdrant/init_qdrant.py --multimodal
 ```
 
 **Scenario 3: Creating individual collections**
 ```bash
 # Create each collection separately
-python scripts/init_qdrant.py --collection text_chunks
-python scripts/init_qdrant.py --collection table_chunks
-python scripts/init_qdrant.py --collection image_chunks --vector-size 512
+python backend/scripts/qdrant/init_qdrant.py --collection text_chunks
+python backend/scripts/qdrant/init_qdrant.py --collection table_chunks
+python backend/scripts/qdrant/init_qdrant.py --collection image_chunks --vector-size 512
 ```
 
 **Scenario 4: Resetting a collection**
 ```bash
 # Delete and recreate a specific collection
-python scripts/init_qdrant.py --collection text_chunks --recreate
+python backend/scripts/qdrant/init_qdrant.py --collection text_chunks --recreate
 ```
 
 **Scenario 5: Checking setup before starting**
 ```bash
 # Verify everything is configured correctly
-python scripts/init_qdrant.py --verify
+python backend/scripts/qdrant/init_qdrant.py --verify
 ```
 
 ### Environment Variables
@@ -246,7 +246,7 @@ You can also use environment variables:
 ```bash
 export QDRANT_URL=http://localhost:6333
 export QDRANT_VECTOR_SIZE=384
-python scripts/init_qdrant.py
+python backend/scripts/qdrant/init_qdrant.py
 ```
 
 ### Collection Configurations
@@ -302,7 +302,7 @@ The additional dimension (384 → 768) adds minimal overhead to vector search (~
 
 ```bash
 # Verify all collections
-python scripts/init_qdrant.py --verify
+python backend/scripts/qdrant/init_qdrant.py --verify
 ```
 
 **Using Python**:

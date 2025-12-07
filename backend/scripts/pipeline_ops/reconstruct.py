@@ -12,12 +12,13 @@ Reconstruction order:
 5. Verify MinIO bucket
 
 Usage:
-    python backend/scripts/reconstruct.py
-    python backend/scripts/reconstruct.py --verify-only  # Check without recreating
+    python backend/scripts/pipeline_ops/reconstruct.py
+    python backend/scripts/pipeline_ops/reconstruct.py --verify-only  # Check without recreating
 """
 
 import sys
 import os
+import yaml
 from pathlib import Path
 from typing import Dict, Any
 
@@ -45,6 +46,15 @@ except ImportError as e:
 logger = get_logger(__name__)
 
 
+def load_config_yaml() -> dict:
+    """Load configuration from config.yaml file."""
+    config_file = backend_path / "config.yaml"
+    if config_file.exists():
+        with open(config_file, 'r', encoding='utf-8') as f:
+            return yaml.safe_load(f) or {}
+    return {}
+
+
 def verify_supabase_schema(verify_only: bool = False) -> bool:
     """
     Verify Supabase tables exist using configured table names.
@@ -57,7 +67,7 @@ def verify_supabase_schema(verify_only: bool = False) -> bool:
 
     try:
         print("🔌 Connecting to Supabase...")
-        # Use config values from settings
+        # Supabase doesn't have specific config in config.yaml, use settings for API keys
         supabase_url = getattr(settings, 'supabase_url', None)
         if supabase_url:
             print(f"📋 Supabase URL: {supabase_url}")
@@ -73,7 +83,7 @@ def verify_supabase_schema(verify_only: bool = False) -> bool:
         for table in required_tables:
             try:
                 # Try to select one row to verify table exists
-                result = client.table(table).select('id').limit(1).execute()
+                client.table(table).select('id').limit(1).execute()
                 print(f"  ✅ {table} - exists")
             except Exception as e:
                 print(f"  ❌ {table} - missing ({str(e)})")
@@ -141,8 +151,9 @@ def recreate_elasticsearch_index(verify_only: bool = False) -> bool:
 
     try:
         print("🔌 Connecting to Elasticsearch...")
-        # Use config values from settings
-        elasticsearch_config = getattr(settings, 'elasticsearch', {})
+        # Load config directly from config.yaml
+        config_data = load_config_yaml()
+        elasticsearch_config = config_data.get('elasticsearch', {})
         es_url = elasticsearch_config.get('url', 'http://localhost:9200')
         index_name = elasticsearch_config.get('index_name', 'rag_chunks')
 
@@ -199,7 +210,7 @@ def recreate_qdrant_collections(verify_only: bool = False) -> bool:
     """
     Recreate all Qdrant collections using config.yaml settings.
 
-    Based on: scripts/init_qdrant.py
+    Based on: backend/scripts/qdrant/init_qdrant.py
     """
     print("\n" + "="*60)
     print("🔗 PHASE 3: Recreating Qdrant Collections")
@@ -207,16 +218,17 @@ def recreate_qdrant_collections(verify_only: bool = False) -> bool:
 
     try:
         print("🔌 Connecting to Qdrant...")
-        # Use config values from settings
-        qdrant_host = getattr(settings, 'qdrant_host', 'localhost')
-        qdrant_port = getattr(settings, 'qdrant_port', 6333)
+        # Load config directly from config.yaml
+        config_data = load_config_yaml()
+        qdrant_config = config_data.get('qdrant', {})
+        qdrant_host = qdrant_config.get('host', 'localhost')
+        qdrant_port = qdrant_config.get('port', 6333)
         qdrant_url = f"http://{qdrant_host}:{qdrant_port}"
 
         client = QdrantClient(url=qdrant_url)
         print("✅ Connected to Qdrant")
 
-        # Get collections config from settings
-        qdrant_config = getattr(settings, 'qdrant', {})
+        # Get collections config directly from config.yaml
         collections_config = qdrant_config.get('collections', {
             'text_chunks': {'vector_size': 768},
             'table_chunks': {'vector_size': 768},
@@ -248,7 +260,7 @@ def recreate_qdrant_collections(verify_only: bool = False) -> bool:
             if not verify_only:
                 print(f"  🔨 Creating {collection_name} ({vector_size} dims)...")
 
-                # Use the init function from init_qdrant.py
+                # Use the init function from backend/scripts/qdrant/init_qdrant.py
                 sys.path.insert(0, str(backend_path.parent / "scripts"))
                 try:
                     from init_qdrant import init_qdrant_collection
@@ -293,10 +305,10 @@ def verify_neo4j_schema(verify_only: bool = False) -> bool:
 
     try:
         print("🔌 Connecting to Neo4j...")
-        # Use config values from settings
-        neo4j_config = getattr(settings, 'neo4j', {})
+        # Load config directly from config.yaml
+        config_data = load_config_yaml()
+        neo4j_config = config_data.get('neo4j', {})
         neo4j_uri = neo4j_config.get('uri', 'bolt://localhost:7687')
-        neo4j_user = neo4j_config.get('user', 'neo4j')
         neo4j_database = neo4j_config.get('database', 'neo4j')
 
         from app.core.neo4j_database import get_neo4j_driver
@@ -372,8 +384,9 @@ def verify_minio_bucket(verify_only: bool = False) -> bool:
     print("📦 PHASE 5: Verifying MinIO Bucket")
     print("="*60)
 
-    # Use config values from settings
-    minio_config = getattr(settings, 'minio', {})
+    # Load config directly from config.yaml
+    config_data = load_config_yaml()
+    minio_config = config_data.get('minio', {})
     bucket_name = minio_config.get('bucket_name', 'raw-documents')
     minio_endpoint = minio_config.get('endpoint', 'localhost:9000')
 
@@ -480,10 +493,10 @@ def main():
         epilog="""
 Examples:
   # Full reconstruction (create missing components)
-  python backend/scripts/reconstruct.py
+  python backend/scripts/pipeline_ops/reconstruct.py
 
   # Verification only (check without creating)
-  python backend/scripts/reconstruct.py --verify-only
+  python backend/scripts/pipeline_ops/reconstruct.py --verify-only
         """
     )
 

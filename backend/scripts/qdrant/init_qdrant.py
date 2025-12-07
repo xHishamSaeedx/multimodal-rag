@@ -40,7 +40,7 @@ except ImportError:
 # Try to import backend config for defaults
 try:
     # Add backend directory to path
-    backend_dir = Path(__file__).parent.parent / "backend"
+    backend_dir = Path(__file__).parent.parent.parent
     sys.path.insert(0, str(backend_dir))
     from app.core.config import settings
     HAS_CONFIG = True
@@ -366,26 +366,33 @@ if __name__ == "__main__":
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Examples:
-  # Create text_chunks collection (Phase 1)
-  python scripts/init_qdrant.py --collection text_chunks
+  # Create text_chunks collection
+  cd backend/scripts/qdrant
+  python init_qdrant.py --collection text_chunks
 
-  # Create table_chunks collection (Phase 2)
-  python scripts/init_qdrant.py --collection table_chunks --vector-size 768
+  # Create table_chunks collection
+  cd backend/scripts/qdrant
+  python init_qdrant.py --collection table_chunks --vector-size 768
 
-  # Create image_chunks collection (Phase 2, CLIP base)
-  python scripts/init_qdrant.py --collection image_chunks --vector-size 512
+  # Create image_chunks collection (CLIP base)
+  cd backend/scripts/qdrant
+  python init_qdrant.py --collection image_chunks --vector-size 512
 
-  # Create all Phase 2 multimodal collections
-  python scripts/init_qdrant.py --multimodal
+  # Create all multimodal collections (tables + images)
+  cd backend/scripts/qdrant
+  python init_qdrant.py --multimodal
 
-  # Create all collections (Phase 1 + Phase 2)
-  python scripts/init_qdrant.py --all
+  # Create all collections
+  cd backend/scripts/qdrant
+  python init_qdrant.py --all
 
   # Verify all collections are properly configured
-  python scripts/init_qdrant.py --verify
+  cd backend/scripts/qdrant
+  python init_qdrant.py --verify
 
   # Recreate existing collection
-  python scripts/init_qdrant.py --collection text_chunks --recreate
+  cd backend/scripts/qdrant
+  python init_qdrant.py --collection text_chunks --recreate
         """,
     )
     parser.add_argument(

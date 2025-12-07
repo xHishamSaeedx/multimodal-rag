@@ -2,15 +2,15 @@
 Quick script to clean out Neo4j database - deletes all nodes and relationships.
 
 Usage:
-    python scripts/cleanup_neo4j.py
-    python scripts/cleanup_neo4j.py --confirm  # Skips confirmation prompt
+    python backend/scripts/neo4j/cleanup_neo4j.py
+    python backend/scripts/neo4j/cleanup_neo4j.py --confirm  # Skips confirmation prompt
 """
 import sys
 import os
 from pathlib import Path
 
 # Add backend to path
-backend_path = Path(__file__).parent.parent
+backend_path = Path(__file__).parent.parent.parent
 sys.path.insert(0, str(backend_path))
 
 from app.core.neo4j_database import get_neo4j_driver

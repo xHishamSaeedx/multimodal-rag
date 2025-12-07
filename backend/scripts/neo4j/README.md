@@ -10,10 +10,10 @@ Cleans out the entire Neo4j database - deletes all nodes and relationships.
 ```bash
 # Interactive (with confirmation prompt)
 cd backend
-python scripts/cleanup_neo4j.py
+python scripts/neo4j/cleanup_neo4j.py
 
 # Non-interactive (skip confirmation)
-python scripts/cleanup_neo4j.py --confirm
+python scripts/neo4j/cleanup_neo4j.py --confirm
 ```
 
 **What it does:**

@@ -10,14 +10,14 @@ This is useful for cleaning up after bugs where entities were created
 but never properly linked to document chunks.
 
 Usage:
-    python -m backend.scripts.cleanup_orphaned_entities
+    python backend/scripts/neo4j/cleanup_orphaned_entities.py
 """
 
 import sys
 from pathlib import Path
 
 # Add backend to path
-backend_dir = Path(__file__).parent.parent
+backend_dir = Path(__file__).parent.parent.parent
 sys.path.insert(0, str(backend_dir))
 
 from app.repositories.graph_repository import GraphRepository

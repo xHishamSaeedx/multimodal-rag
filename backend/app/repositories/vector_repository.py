@@ -170,14 +170,14 @@ class VectorRepository:
                         f"\n"
                         f"To fix this:\n"
                         f"1. Delete the existing collection and let it be recreated with correct dimension, OR\n"
-                        f"2. Run: python scripts/init_qdrant.py --recreate --vector-size {self.vector_size}\n"
+                        f"2. Run: python backend/scripts/qdrant/init_qdrant.py --recreate --vector-size {self.vector_size}\n"
                         f"\n"
                         f"Current embedding model dimension: {self.vector_size}"
                     )
                     raise VectorRepositoryError(
                         f"Dimension mismatch: Collection has {existing_vector_size} dimensions, "
                         f"but embedding model produces {self.vector_size} dimensions. "
-                        f"Recreate collection with: python scripts/init_qdrant.py --recreate --vector-size {self.vector_size}",
+                        f"Recreate collection with: python backend/scripts/qdrant/init_qdrant.py --recreate --vector-size {self.vector_size}",
                         {
                             "collection_name": self.collection_name,
                             "existing_vector_size": existing_vector_size,
