@@ -27,7 +27,7 @@ qdrant:
     table_chunks:
       vector_size: 768 # Same as text embeddings
     image_chunks:
-      vector_size: 512 # CLIP base (can be 768 for SigLIP base or 1024 for SigLIP large)
+      vector_size: 768 # CLIP base (can be 768 for SigLIP base or 1024 for SigLIP large)
 
 # BM25 Sparse Index - Elasticsearch
 elasticsearch:
@@ -92,6 +92,11 @@ vision:
 
   # Captioning Model (when processing_mode = captioning)
   captioning_model: Salesforce/blip-image-captioning-base
+
+  # Image Embedding Model Configuration
+  image_embedding:
+    model_type: clip # Options: clip, siglip
+    model_name: sentence-transformers/clip-ViT-L-14 # CLIP: clip-ViT-L-14 (768d), clip-ViT-B-32 (512d); SigLIP: vit_large_patch16_siglip_384 (1024d), vit_base_patch16_siglip_224 (768d)
 
 # ============================================
 # API Configuration

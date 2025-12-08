@@ -22,7 +22,7 @@ from pathlib import Path
 from typing import Dict, Any
 
 # Add backend to path
-backend_path = Path(__file__).parent.parent
+backend_path = Path(__file__).parent.parent.parent
 sys.path.insert(0, str(backend_path))
 
 # Import required modules
@@ -139,7 +139,7 @@ def cleanup_elasticsearch(confirm: bool = False) -> bool:
     """
     Clear all documents from Elasticsearch index.
 
-    Based on: scripts/clean_elasticsearch.py pattern
+    Based on: scripts/elasticsearch/clean_elasticsearch.py pattern
     """
     print("\n" + "="*60)
     print("🔍 PHASE 2: Clearing Elasticsearch")
@@ -298,30 +298,238 @@ def cleanup_qdrant(confirm: bool = False) -> bool:
         return False
 
 
+def cleanup_supabase_storage(confirm: bool = False) -> bool:
+    """
+    Clear all Supabase Storage buckets.
+
+    Uses Supabase Storage API to delete all files from buckets.
+    """
+    print("\n" + "="*60)
+    print("📦 PHASE 5: Clearing Supabase Storage")
+    print("="*60)
+
+    try:
+        # Get Supabase client
+        client = get_supabase_client()
+
+        # Buckets to clean
+        buckets_to_clean = ['document-images']  # Add more buckets as needed
+
+        print(f"🎯 Target buckets: {', '.join(buckets_to_clean)}")
+
+        if not get_confirmation(f"This will delete ALL files from Supabase Storage buckets: {', '.join(buckets_to_clean)}", confirm):
+            return True  # Skip is not failure
+
+        print("🔌 Using Supabase Storage API...")
+
+        total_files_deleted = 0
+
+        for bucket_name in buckets_to_clean:
+            print(f"\n🎯 Processing bucket: {bucket_name}")
+
+            try:
+                # First, list all document folders (top-level prefixes)
+                document_folders = client.storage.from_(bucket_name).list()
+                print(f"  📁 Found {len(document_folders)} document folders in '{bucket_name}'")
+
+                if not document_folders:
+                    print(f"  ℹ️  Bucket '{bucket_name}' is already empty")
+                    continue
+
+                # For each document folder, list and delete all files
+                batch_size = 100  # Supabase allows batch deletion
+                all_file_paths = []
+
+                for folder_info in document_folders:
+                    document_id = folder_info['name']
+                    print(f"  📂 Processing document folder: {document_id}")
+
+                    try:
+                        # List all files in this document's folder
+                        files_in_folder = client.storage.from_(bucket_name).list(document_id)
+
+                        if files_in_folder:
+                            # Build full paths for files in this folder
+                            for file_info in files_in_folder:
+                                file_path = f"{document_id}/{file_info['name']}"
+                                all_file_paths.append(file_path)
+
+                            print(f"    📋 Found {len(files_in_folder)} files")
+                        else:
+                            print("    📋 No files found")
+
+                    except Exception as e:
+                        print(f"    ⚠️  Error listing files in folder {document_id}: {e}")
+                        continue
+
+                if not all_file_paths:
+                    print("  ℹ️  No files found in any document folders")
+                    continue
+
+                print(f"  📊 Total files to delete: {len(all_file_paths)}")
+
+                # Delete files in batches
+                files_deleted = 0
+                for i in range(0, len(all_file_paths), batch_size):
+                    batch = all_file_paths[i:i + batch_size]
+
+                    try:
+                        # Delete batch of files
+                        client.storage.from_(bucket_name).remove(batch)
+                        files_deleted += len(batch)
+                        print(f"  ✅ Deleted batch of {len(batch)} files ({files_deleted:,}/{len(all_file_paths):,} total)")
+                    except Exception as e:
+                        print(f"  ⚠️  Failed to delete batch: {e}")
+                        # Continue with next batch
+
+                print(f"  ✅ Deleted {files_deleted} files from '{bucket_name}'")
+                total_files_deleted += files_deleted
+
+            except Exception as e:
+                print(f"  ❌ Error with bucket '{bucket_name}': {e}")
+                return False
+
+        print("✅ Supabase Storage cleanup completed successfully!")
+        print(f"   Deleted {total_files_deleted} files from {len(buckets_to_clean)} bucket(s)")
+        return True
+
+    except Exception as e:
+        print(f"❌ Supabase Storage cleanup failed: {e}")
+        logger.error(f"Supabase Storage cleanup failed: {e}", exc_info=True)
+        return False
+
+
 def cleanup_minio(confirm: bool = False) -> bool:
     """
-    Empty the MinIO bucket.
+    Empty the MinIO bucket by deleting all objects.
 
-    Note: This requires manual intervention or MinIO client setup
+    Uses boto3 to connect to MinIO and programmatically delete all objects.
     """
     print("\n" + "="*60)
     print("📦 PHASE 5: Clearing MinIO Data Lake")
     print("="*60)
 
-    bucket_name = getattr(settings, 'minio_bucket_name', 'raw-documents')
-    print(f"🎯 Target bucket: '{bucket_name}'")
-    print("⚠️  MinIO cleanup requires manual intervention:")
-    print("   1. Open MinIO Console: http://localhost:9000")
-    print("   2. Login with credentials (admin/admin12345)")
-    print(f"   3. Navigate to '{bucket_name}' bucket")
-    print("   4. Select all objects → Delete")
+    try:
+        # Get MinIO configuration
+        minio_endpoint = getattr(settings, 'minio_endpoint', 'localhost:9000')
+        bucket_name = getattr(settings, 'minio_bucket_name', 'raw-documents')
+        access_key = getattr(settings, 'minio_access_key', 'admin')
+        secret_key = getattr(settings, 'minio_secret_key', 'admin12345')
+        use_ssl = getattr(settings, 'minio_use_ssl', False)
 
-    if get_confirmation("Have you manually emptied the MinIO bucket?", confirm):
-        print("✅ MinIO cleanup acknowledged!")
-        return True
-    else:
-        print("ℹ️  Skipping MinIO cleanup - remember to empty it manually")
-        return True
+        print(f"🎯 Target bucket: '{bucket_name}' at {minio_endpoint}")
+
+        if not get_confirmation(f"This will delete ALL files from MinIO bucket '{bucket_name}'", confirm):
+            return True  # Skip is not failure
+
+        print("🔌 Connecting to MinIO...")
+
+        # Create S3 client for MinIO
+        s3_client = boto3.client(
+            's3',
+            endpoint_url=f"http{'s' if use_ssl else ''}://{minio_endpoint}",
+            aws_access_key_id=access_key,
+            aws_secret_access_key=secret_key,
+            region_name=None,  # MinIO doesn't require a region
+            use_ssl=use_ssl
+        )
+
+        print("✅ Connected to MinIO")
+
+        # Check if bucket exists
+        try:
+            s3_client.head_bucket(Bucket=bucket_name)
+            print(f"📋 Bucket '{bucket_name}' exists")
+        except ClientError as e:
+            if e.response['Error']['Code'] == '404':
+                print(f"ℹ️  Bucket '{bucket_name}' does not exist - nothing to clean")
+                return True
+            else:
+                print(f"❌ Error checking bucket: {e}")
+                return False
+
+        # List all objects in the bucket
+        print("📋 Listing objects in bucket...")
+        objects_to_delete = []
+        continuation_token = None
+
+        while True:
+            list_kwargs = {
+                'Bucket': bucket_name,
+                'MaxKeys': 1000
+            }
+            if continuation_token:
+                list_kwargs['ContinuationToken'] = continuation_token
+
+            try:
+                response = s3_client.list_objects_v2(**list_kwargs)
+                contents = response.get('Contents', [])
+
+                for obj in contents:
+                    objects_to_delete.append({'Key': obj['Key']})
+
+                if not response.get('IsTruncated'):
+                    break
+                continuation_token = response.get('NextContinuationToken')
+
+            except ClientError as e:
+                print(f"❌ Error listing objects: {e}")
+                return False
+
+        total_objects = len(objects_to_delete)
+        if total_objects == 0:
+            print("ℹ️  Bucket is already empty")
+            return True
+
+        print(f"📊 Found {total_objects:,} objects to delete")
+
+        # Delete objects in batches (S3 allows max 1000 objects per delete request)
+        batch_size = 1000
+        deleted_count = 0
+
+        print("🗑️  Deleting objects...")
+        for i in range(0, total_objects, batch_size):
+            batch = objects_to_delete[i:i + batch_size]
+            delete_request = {
+                'Objects': batch,
+                'Quiet': True  # Don't return deleted object info to reduce response size
+            }
+
+            try:
+                response = s3_client.delete_objects(
+                    Bucket=bucket_name,
+                    Delete=delete_request
+                )
+
+                batch_deleted = len(batch)
+                deleted_count += batch_deleted
+                print(f"  ✅ Deleted batch of {batch_deleted} objects ({deleted_count:,}/{total_objects:,} total)")
+
+            except ClientError as e:
+                print(f"  ❌ Error deleting batch: {e}")
+                return False
+
+        # Verify cleanup
+        print("🔍 Verifying cleanup...")
+        try:
+            response = s3_client.list_objects_v2(Bucket=bucket_name, MaxKeys=1)
+            remaining = len(response.get('Contents', []))
+            if remaining == 0:
+                print("✅ MinIO cleanup completed successfully!")
+                print(f"   Deleted {deleted_count:,} objects from bucket '{bucket_name}'")
+                return True
+            else:
+                print(f"⚠️  Warning: {remaining} objects still remain")
+                return False
+
+        except ClientError as e:
+            print(f"❌ Error verifying cleanup: {e}")
+            return False
+
+    except Exception as e:
+        print(f"❌ MinIO cleanup failed: {e}")
+        logger.error(f"MinIO cleanup failed: {e}", exc_info=True)
+        return False
 
 
 def run_clean_slate(confirm: bool = False) -> bool:
@@ -341,7 +549,8 @@ def run_clean_slate(confirm: bool = False) -> bool:
     print("2. 🔍 Elasticsearch - BM25 index chunks")
     print("3. 🕸️  Neo4j - Knowledge graph nodes and relationships")
     print("4. 🔗 Qdrant - Vector collections")
-    print("5. 📦 MinIO - Raw document files")
+    print("5. 📦 Supabase Storage - Document images and files")
+    print("6. 📦 MinIO - Raw document files")
     print("="*60)
 
     if not confirm and not get_confirmation("Begin complete clean slate reconstruction?", confirm):
@@ -357,6 +566,7 @@ def run_clean_slate(confirm: bool = False) -> bool:
         ("Elasticsearch", cleanup_elasticsearch),
         ("Neo4j", cleanup_neo4j),
         ("Qdrant", cleanup_qdrant),
+        ("Supabase Storage", cleanup_supabase_storage),
         ("MinIO", cleanup_minio),
     ]
 
@@ -365,7 +575,7 @@ def run_clean_slate(confirm: bool = False) -> bool:
             success = cleanup_func(confirm)
             results.append((phase_name, success))
 
-            if not success and phase_name != "MinIO":  # MinIO failure is not critical
+            if not success and phase_name not in ["Supabase Storage", "MinIO"]:  # Storage failures are not critical
                 print(f"❌ Critical failure in {phase_name} phase - aborting")
                 break
 
@@ -442,7 +652,8 @@ Examples:
         print("2. 🔍 Elasticsearch: All chunks from BM25 index")
         print("3. 🕸️  Neo4j: All nodes and relationships")
         print("4. 🔗 Qdrant: All vector collections")
-        print("5. 📦 MinIO: All files in raw-documents bucket")
+        print("5. 📦 Supabase Storage: All files in document-images bucket")
+        print("6. 📦 MinIO: All files in raw-documents bucket")
         print("\nRun without --dry-run to actually perform the cleanup.")
         return
 

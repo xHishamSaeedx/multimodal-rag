@@ -49,7 +49,7 @@ class ImageRetriever:
             collection_name="image_chunks",
             vector_size=768,  # CLIP large produces 768 dimensions (matches text embeddings)
         )
-        self.embedder = embedder or ImageEmbedder(model_type="clip")
+        self.embedder = embedder or ImageEmbedder()
         
         # Verify embedding dimension is set
         if self.embedder.embedding_dim is None:

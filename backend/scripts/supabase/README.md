@@ -23,7 +23,9 @@ A comprehensive script to clean up Supabase tables and Supabase Storage buckets 
 
 ### Available Buckets
 
-- `document-images` - Document images and extracted visual content (10MB limit per file)
+- `raw-documents` - Raw uploaded files
+- `processed-files` - Processed document files
+- `temp-uploads` - Temporary upload files
 
 ## Usage
 

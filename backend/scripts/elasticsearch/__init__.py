@@ -1,0 +1,1 @@
+# Elasticsearch management scripts package

@@ -64,34 +64,33 @@ class ImageEmbedder:
     
     def __init__(
         self,
-        model_type: str = "clip",  # "clip" or "siglip" (default: "clip" for unified 768 dim)
-        model_name: Optional[str] = None,
+        model_type: Optional[str] = None,  # "clip" or "siglip" (default: from config)
+        model_name: Optional[str] = None,  # Specific model name (default: from config)
         device: Optional[str] = None,
     ):
         """
         Initialize the image embedder.
-        
+
         Args:
-            model_type: Model type - "clip" or "siglip" (default: "clip" for unified 768 dim)
-            model_name: Specific model name (default: based on model_type)
+            model_type: Model type - "clip" or "siglip" (default: from config)
+            model_name: Specific model name (default: from config or based on model_type)
             device: Device to use ("cpu" or "cuda", default: from config)
         """
+        # Use config values if not provided
+        if model_type is None:
+            model_type = settings.image_embedding_model_type
+
         self.model_type = model_type.lower()
-        
+
         if self.model_type not in ("clip", "siglip"):
             raise EmbeddingError(
                 f"Invalid model_type: {model_type}. Must be 'clip' or 'siglip'",
                 {"model_type": model_type},
             )
         
-        # Set default model names
+        # Set default model names from config or defaults
         if model_name is None:
-            if self.model_type == "clip":
-                # Use CLIP large model (768 dim) to match text embeddings and enable unified text-to-image search
-                model_name = "sentence-transformers/clip-ViT-L-14"  # 768 dimensions
-            else:  # siglip
-                # Use SigLIP large model (1024 dim) for better quality
-                model_name = "vit_large_patch16_siglip_384"  # 1024 dimensions
+            model_name = settings.image_embedding_model_name
         
         self.model_name = model_name
         requested_device = device or settings.embedding_device

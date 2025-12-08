@@ -23,7 +23,7 @@ from pathlib import Path
 from typing import Dict, Any
 
 # Add backend to path
-backend_path = Path(__file__).parent.parent
+backend_path = Path(__file__).parent.parent.parent
 sys.path.insert(0, str(backend_path))
 
 # Import required modules
@@ -178,26 +178,32 @@ def recreate_elasticsearch_index(verify_only: bool = False) -> bool:
         # Create index with proper mappings
         print(f"🔨 Creating index '{index_name}'...")
 
-        # Import the mapping function from init script
-        sys.path.insert(0, str(backend_path.parent / "scripts"))
+        # Use subprocess to call the init script directly
+        import subprocess
         try:
-            from init_elasticsearch import get_index_mapping
-            index_mapping = get_index_mapping()
+            cmd = [
+                sys.executable,
+                str(backend_path / "scripts" / "elasticsearch" / "init_elasticsearch.py"),
+                "--index", index_name
+            ]
 
-            es.indices.create(index=index_name, body=index_mapping)
-            print("✅ Index created successfully")
-
-            # Verify
-            if es.indices.exists(index=index_name):
-                print(f"✅ Index '{index_name}' verified")
-                return True
+            result = subprocess.run(cmd, capture_output=True, text=True, cwd=backend_path.parent)
+            if result.returncode == 0:
+                print("✅ Index created successfully")
+                # Verify
+                if es.indices.exists(index=index_name):
+                    print(f"✅ Index '{index_name}' verified")
+                    return True
+                else:
+                    print(f"❌ Index '{index_name}' creation failed")
+                    return False
             else:
-                print(f"❌ Index '{index_name}' creation failed")
+                print(f"❌ Index creation failed: {result.stderr}")
                 return False
 
-        except ImportError:
-            print("❌ Could not import index mapping function")
-            print("   Run: python scripts/init_elasticsearch.py")
+        except Exception as e:
+            print(f"❌ Error running init script: {e}")
+            print("   Try: python backend/scripts/elasticsearch/init_elasticsearch.py")
             return False
 
     except Exception as e:
@@ -261,9 +267,9 @@ def recreate_qdrant_collections(verify_only: bool = False) -> bool:
                 print(f"  🔨 Creating {collection_name} ({vector_size} dims)...")
 
                 # Use the init function from backend/scripts/qdrant/init_qdrant.py
-                sys.path.insert(0, str(backend_path.parent / "scripts"))
+                sys.path.insert(0, str(backend_path / "scripts"))
                 try:
-                    from init_qdrant import init_qdrant_collection
+                    from qdrant.init_qdrant import init_qdrant_collection
                     success = init_qdrant_collection(
                         qdrant_url=qdrant_url,
                         collection_name=collection_name,

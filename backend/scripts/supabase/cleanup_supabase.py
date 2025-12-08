@@ -72,7 +72,8 @@ def get_available_tables() -> List[str]:
 
 def get_available_buckets() -> List[str]:
     """Get list of available Supabase Storage buckets in the system."""
-    # Based on db/db.sql, there's one bucket: document-images
+    # Supabase Storage buckets - these are typically predefined
+    # You can add more bucket names as needed
     buckets = ['document-images']
     return buckets
 
@@ -180,8 +181,32 @@ def cleanup_supabase_buckets(buckets: List[str], supabase_client, dry_run: bool 
 
     if dry_run:
         print("🔍 DRY RUN - Would empty buckets:")
-        for bucket in buckets:
-            print(f"  - {bucket}")
+        try:
+            for bucket in buckets:
+                print(f"  📦 Bucket: {bucket}")
+
+                # Show what would be cleaned
+                document_folders = supabase_client.storage.from_(bucket).list()
+                print(f"    📁 Found {len(document_folders)} document folders")
+
+                total_files = 0
+                for folder_info in document_folders[:5]:  # Show first 5 folders
+                    document_id = folder_info['name']
+                    try:
+                        files_in_folder = supabase_client.storage.from_(bucket).list(document_id)
+                        print(f"      📂 {document_id}: {len(files_in_folder)} files")
+                        total_files += len(files_in_folder)
+                    except Exception as e:
+                        print(f"      📂 {document_id}: Error listing files - {e}")
+
+                if len(document_folders) > 5:
+                    print(f"      ... and {len(document_folders) - 5} more folders")
+
+                print(f"    📊 Total files to delete: {total_files}")
+
+        except Exception as e:
+            print(f"  ⚠️  Error during dry run: {e}")
+
         return True
 
     try:
@@ -191,27 +216,56 @@ def cleanup_supabase_buckets(buckets: List[str], supabase_client, dry_run: bool 
             print(f"\n🎯 Processing bucket: {bucket_name}")
 
             try:
-                # List all files in the bucket
-                files = supabase_client.storage.from_(bucket_name).list()
-                print(f"  📋 Found {len(files)} files in '{bucket_name}'")
+                # First, list all document folders (top-level prefixes)
+                document_folders = supabase_client.storage.from_(bucket_name).list()
+                print(f"  📁 Found {len(document_folders)} document folders in '{bucket_name}'")
 
-                if not files:
+                if not document_folders:
                     print(f"  ℹ️  Bucket '{bucket_name}' is already empty")
                     continue
 
-                # Delete files in batches
+                # For each document folder, list and delete all files
                 batch_size = 100  # Supabase allows batch deletion
-                files_deleted = 0
+                all_file_paths = []
 
-                for i in range(0, len(files), batch_size):
-                    batch = files[i:i + batch_size]
-                    file_paths = [file['name'] for file in batch]
+                for folder_info in document_folders:
+                    document_id = folder_info['name']
+                    print(f"  📂 Processing document folder: {document_id}")
+
+                    try:
+                        # List all files in this document's folder
+                        files_in_folder = supabase_client.storage.from_(bucket_name).list(document_id)
+
+                        if files_in_folder:
+                            # Build full paths for files in this folder
+                            for file_info in files_in_folder:
+                                file_path = f"{document_id}/{file_info['name']}"
+                                all_file_paths.append(file_path)
+
+                            print(f"    📋 Found {len(files_in_folder)} files")
+                        else:
+                            print("    📋 No files found")
+
+                    except Exception as e:
+                        print(f"    ⚠️  Error listing files in folder {document_id}: {e}")
+                        continue
+
+                if not all_file_paths:
+                    print(f"  ℹ️  No files found in any document folders")
+                    continue
+
+                print(f"  📊 Total files to delete: {len(all_file_paths)}")
+
+                # Delete files in batches
+                files_deleted = 0
+                for i in range(0, len(all_file_paths), batch_size):
+                    batch = all_file_paths[i:i + batch_size]
 
                     try:
                         # Delete batch of files
-                        supabase_client.storage.from_(bucket_name).remove(file_paths)
-                        files_deleted += len(file_paths)
-                        print(f"  ✅ Deleted batch of {len(file_paths)} files")
+                        supabase_client.storage.from_(bucket_name).remove(batch)
+                        files_deleted += len(batch)
+                        print(f"  ✅ Deleted batch of {len(batch)} files ({files_deleted:,}/{len(all_file_paths):,} total)")
                     except Exception as e:
                         print(f"  ⚠️  Failed to delete batch: {e}")
                         # Continue with next batch
@@ -274,7 +328,7 @@ def run_cleanup(config: CleanupConfig) -> bool:
 
     # Connect to Supabase if needed
     client = None
-    if config.tables:
+    if config.tables or config.buckets:
         try:
             print("\n🔌 Connecting to Supabase...")
             client = get_supabase_client()

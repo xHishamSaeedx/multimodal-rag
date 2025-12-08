@@ -107,7 +107,7 @@ class IngestionPipeline:
         )
         # Use pre-initialized embedders if provided, otherwise create new instances
         self.embedder = text_embedder if text_embedder is not None else TextEmbedder()
-        self.image_embedder = image_embedder if image_embedder is not None else ImageEmbedder(model_type="clip")
+        self.image_embedder = image_embedder if image_embedder is not None else ImageEmbedder()
         
         # Initialize vector repository with embedding dimension from embedder
         # This ensures Qdrant collection matches the actual model dimensions

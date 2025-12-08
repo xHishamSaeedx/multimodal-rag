@@ -81,6 +81,11 @@ class Settings(BaseSettings):
         kwargs.setdefault('vision_llm_model', vision_config.get('llm_model', "gpt-4o"))
         kwargs.setdefault('captioning_model', vision_config.get('captioning_model', "Salesforce/blip-image-captioning-base"))
 
+        # Image Embedding Settings
+        image_embedding_config = vision_config.get('image_embedding', {})
+        kwargs.setdefault('image_embedding_model_type', image_embedding_config.get('model_type', "clip"))
+        kwargs.setdefault('image_embedding_model_name', image_embedding_config.get('model_name', "sentence-transformers/clip-ViT-L-14"))
+
         # Neo4j Settings
         neo4j_config = config_data.get('neo4j', {})
         kwargs.setdefault('neo4j_enabled', neo4j_config.get('enabled', True))
@@ -149,6 +154,10 @@ class Settings(BaseSettings):
     vision_llm_provider: str
     vision_llm_model: str
     captioning_model: str
+
+    # Image Embedding Settings
+    image_embedding_model_type: str
+    image_embedding_model_name: str
 
     # Vision LLM API Keys - from env
     openai_api_key: Optional[str] = None

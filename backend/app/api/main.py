@@ -81,7 +81,7 @@ async def lifespan(app: FastAPI):
         
         logger.info("service_initialization", service="ImageEmbedder", status="starting")
         from app.services.embedding.image_embedder import ImageEmbedder
-        image_embedder = ImageEmbedder(model_type="clip")
+        image_embedder = ImageEmbedder()
         app.state.image_embedder = image_embedder
         logger.info(
             "service_initialization",
