@@ -20,6 +20,9 @@ from app.utils.metrics import (
     answer_generation_ttft_seconds,
     answers_generated_total,
     tokens_used_total,
+    retrieval_relevance_score,
+    average_retrieval_relevance_per_query,
+    top_k_retrieval_relevance,
 )
 
 logger = get_logger(__name__)
@@ -145,6 +148,56 @@ async def query(
         retrieval_duration_seconds.labels(retrieval_type="hybrid").observe(retrieval_duration)
         chunks_retrieved_total.labels(retrieval_type="hybrid").inc(len(retrieved_chunks))
         chunks_retrieved_per_query.labels(retrieval_type="hybrid").observe(len(retrieved_chunks))
+
+        # Record relevance metrics per retrieval type
+        if retrieved_chunks:
+            # Extract relevance scores from retrieved chunks for different retrieval types
+            retrieval_type_scores = {
+                'dense': [],
+                'sparse': [],
+                'table': [],
+                'image': [],
+                'graph': [],
+                'hybrid': []  # Overall combined score
+            }
+
+            for chunk in retrieved_chunks:
+                # Get individual retrieval scores if available
+                dense_score = chunk.get('dense_score')
+                sparse_score = chunk.get('sparse_score')
+                table_score = chunk.get('table_score')
+                image_score = chunk.get('image_score')
+                graph_score = chunk.get('graph_score')
+                hybrid_score = chunk.get('score', 0.0)  # Combined score
+
+                # Normalize and collect scores for each retrieval type
+                for retrieval_type, score in [
+                    ('dense', dense_score),
+                    ('sparse', sparse_score),
+                    ('table', table_score),
+                    ('image', image_score),
+                    ('graph', graph_score),
+                    ('hybrid', hybrid_score)
+                ]:
+                    if score is not None:
+                        # Ensure score is between 0 and 1
+                        normalized_score = min(max(float(score), 0.0), 1.0)
+                        retrieval_type_scores[retrieval_type].append(normalized_score)
+                        # Record individual chunk relevance score per type
+                        retrieval_relevance_score.labels(retrieval_type=retrieval_type).observe(normalized_score)
+
+            # Record average relevance per query for each retrieval type
+            for retrieval_type, scores in retrieval_type_scores.items():
+                if scores:
+                    avg_relevance = sum(scores) / len(scores)
+                    average_retrieval_relevance_per_query.labels(retrieval_type=retrieval_type).observe(avg_relevance)
+
+                    # Record top-k relevance scores (for the top 5 chunks)
+                    top_k = min(5, len(scores))
+                    if top_k > 0:
+                        top_scores = sorted(scores, reverse=True)[:top_k]
+                        for i, score in enumerate(top_scores, 1):
+                            top_k_retrieval_relevance.labels(retrieval_type=retrieval_type, k=str(i)).observe(score)
         
         # Note: retrieval_duration includes embedding time, but logs will show them separately
         logger.info(

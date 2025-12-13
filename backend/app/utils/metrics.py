@@ -140,6 +140,34 @@ chunks_reranked_total = Counter(
 )
 
 # ============================================================================
+# Relevance Metrics
+# ============================================================================
+
+# Individual chunk relevance scores (0-1, higher is better)
+retrieval_relevance_score = Histogram(
+    'retrieval_relevance_score',
+    'Relevance score of individual retrieved chunks (0-1, higher is better)',
+    ['retrieval_type'],
+    buckets=[0.0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0]
+)
+
+# Average relevance score per query
+average_retrieval_relevance_per_query = Histogram(
+    'average_retrieval_relevance_per_query',
+    'Average relevance score across all retrieved chunks per query (0-1)',
+    ['retrieval_type'],
+    buckets=[0.0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0]
+)
+
+# Top-k relevance scores (relevance of highest scoring chunks)
+top_k_retrieval_relevance = Histogram(
+    'top_k_retrieval_relevance',
+    'Relevance scores of top-k retrieved chunks',
+    ['retrieval_type', 'k'],
+    buckets=[0.0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0]
+)
+
+# ============================================================================
 # Embedding Metrics
 # ============================================================================
 
