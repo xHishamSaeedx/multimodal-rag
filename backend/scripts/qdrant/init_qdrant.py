@@ -186,10 +186,22 @@ def init_multimodal_collections(
 
     # Initialize table_chunks collection
     print("\n[1/2] Setting up table_chunks collection...")
+    # Get text embedding dimension from config
+    text_vector_size = 768  # Default fallback
+    try:
+        # Try to load from config
+        import sys
+        sys.path.insert(0, str(Path(__file__).parent.parent.parent))
+        from app.core.config import settings
+        text_vector_size = settings.embedding_dimension
+        print(f"  Using embedding dimension from config: {text_vector_size}")
+    except Exception as e:
+        print(f"  Could not load config, using default: {text_vector_size} ({e})")
+
     table_success = init_qdrant_collection(
         qdrant_url=qdrant_url,
         collection_name="table_chunks",
-        vector_size=768,  # Matching text embeddings
+        vector_size=text_vector_size,  # Matching text embeddings
         recreate=recreate,
     )
 
@@ -213,9 +225,19 @@ def init_multimodal_collections(
     # Summary
     print("\n" + "="*60)
     print("[OK] All multimodal collections initialized successfully!")
+    # Get text embedding dimension for summary
+    text_vector_size = 768  # Default fallback
+    try:
+        import sys
+        sys.path.insert(0, str(Path(__file__).parent.parent.parent))
+        from app.core.config import settings
+        text_vector_size = settings.embedding_dimension
+    except Exception:
+        pass
+
     print("="*60)
     print("\nCollections created:")
-    print("  - table_chunks (768 dimensions)")
+    print(f"  - table_chunks ({text_vector_size} dimensions)")
     print("    Payload: chunk_id, document_id, table_data, table_markdown, metadata")
     print(f"  - image_chunks ({image_vector_size} dimensions)")
     print("    Payload: chunk_id, document_id, image_path, caption, image_type, metadata")
@@ -294,10 +316,19 @@ def verify_collections(
         collections = client.get_collections()
         collection_names = [c.name for c in collections.collections]
 
-        # Expected collections
+        # Expected collections - try to get dimensions from config
+        text_vector_size = 768  # Default fallback
+        try:
+            import sys
+            sys.path.insert(0, str(Path(__file__).parent.parent.parent))
+            from app.core.config import settings
+            text_vector_size = settings.embedding_dimension
+        except Exception:
+            pass
+
         expected_collections = {
-            "text_chunks": {"vector_size": 768, "description": "Phase 1: Text chunks"},
-            "table_chunks": {"vector_size": 768, "description": "Phase 2: Table chunks"},
+            "text_chunks": {"vector_size": text_vector_size, "description": "Phase 1: Text chunks"},
+            "table_chunks": {"vector_size": text_vector_size, "description": "Phase 2: Table chunks"},
             "image_chunks": {"vector_size": [512, 768, 1024], "description": "Phase 2: Image chunks"},
         }
 

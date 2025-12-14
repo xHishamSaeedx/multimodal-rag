@@ -44,7 +44,10 @@ async def lifespan(app: FastAPI):
         "application_startup",
         message="Starting application - Pre-warming all services and models...",
     )
-    
+
+    # Reload settings from config.yaml to ensure latest values are used
+    settings.reload_from_config()
+
     try:
         # Pre-initialize database clients
         logger.info("service_initialization", service="Elasticsearch", status="starting")

@@ -363,12 +363,12 @@ class ImageEmbedder:
                             {},
                         )
                     # Use CLIP large model for text encoding (768 dim)
-                    # Note: This creates a dimension mismatch (768 vs 1024), but CLIP text embeddings
+                    # Note: This creates a dimension mismatch (768 vs {self.embedding_dim}) if SigLIP uses different dimensions, but CLIP text embeddings
                     # are in a similar semantic space to SigLIP image embeddings, so retrieval should still work
                     clip_model_name = "sentence-transformers/clip-ViT-L-14"  # 768 dim
                     self._clip_text_encoder = SentenceTransformer(clip_model_name, device=self.device)
                     logger.warning(
-                        f"Using CLIP text encoder ({clip_model_name}, 768 dim) for SigLIP image search (1024 dim). "
+                        f"Using CLIP text encoder ({clip_model_name}, 768 dim) for SigLIP image search ({self.embedding_dim} dim). "
                         f"Dimension mismatch may affect retrieval quality. Consider using CLIP for both text and images."
                     )
                 
@@ -380,13 +380,14 @@ class ImageEmbedder:
                     show_progress_bar=False,
                 )
                 
-                # Project 768-dim CLIP embedding to 1024-dim to match SigLIP image embeddings
+                # Project 768-dim CLIP embedding to match SigLIP image embeddings
                 # Simple approach: pad with zeros (not ideal, but works)
                 # Better: use learned projection, but for now we'll pad
-                if len(text_embedding) == 768 and self.embedding_dim == 1024:
-                    # Pad 768-dim to 1024-dim by appending zeros
+                if len(text_embedding) == 768 and self.embedding_dim != 768:
+                    # Pad 768-dim CLIP embedding to match SigLIP dimensions
                     # This is a simple approach - in production, you might want a learned projection
-                    text_embedding = np.pad(text_embedding, (0, 256), mode='constant', constant_values=0)
+                    padding_needed = self.embedding_dim - 768
+                    text_embedding = np.pad(text_embedding, (0, padding_needed), mode='constant', constant_values=0)
                     # Re-normalize after padding
                     text_embedding = text_embedding / np.linalg.norm(text_embedding)
                 

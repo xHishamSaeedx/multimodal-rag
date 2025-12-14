@@ -12,6 +12,7 @@ from app.repositories.vector_repository import VectorRepository, VectorRepositor
 from app.services.embedding.image_embedder import ImageEmbedder, EmbeddingError
 from app.utils.exceptions import BaseAppException
 from app.utils.logging import get_logger
+from app.core.config import settings
 
 logger = get_logger(__name__)
 
@@ -28,8 +29,8 @@ class ImageRetriever:
     Retrieves image chunks from Qdrant image_chunks collection.
     
     Features:
-    - Semantic search using dense embeddings (768 dimensions for CLIP large)
-    - Text-to-image search: encodes text queries into image embedding space (unified CLIP model)
+    - Semantic search using dense embeddings (dimensions from config: 512/768 for CLIP, 768/1024 for SigLIP)
+    - Text-to-image search: encodes text queries into image embedding space (unified CLIP/SigLIP model)
     - Metadata filtering (document type, filename, etc.)
     - Configurable result limits
     """
@@ -44,12 +45,15 @@ class ImageRetriever:
         Args:
             embedder: Optional ImageEmbedder instance (creates new if not provided)
         """
+        # Initialize embedder first to get the correct embedding dimensions
+        self.embedder = embedder or ImageEmbedder()
+
         # Create vector repository for image_chunks collection
+        # Use the embedding dimension from the initialized embedder
         self.vector_repo = VectorRepository(
             collection_name="image_chunks",
-            vector_size=768,  # CLIP large produces 768 dimensions (matches text embeddings)
+            vector_size=self.embedder.embedding_dim,
         )
-        self.embedder = embedder or ImageEmbedder()
         
         # Verify embedding dimension is set
         if self.embedder.embedding_dim is None:

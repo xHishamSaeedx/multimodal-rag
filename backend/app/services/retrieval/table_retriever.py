@@ -12,6 +12,7 @@ from app.repositories.vector_repository import VectorRepository, VectorRepositor
 from app.services.embedding.text_embedder import TextEmbedder, EmbeddingError
 from app.utils.exceptions import BaseAppException
 from app.utils.logging import get_logger
+from app.core.config import settings
 
 logger = get_logger(__name__)
 
@@ -47,7 +48,7 @@ class TableRetriever:
         # Create vector repository for table_chunks collection
         self.vector_repo = VectorRepository(
             collection_name="table_chunks",
-            vector_size=768,  # Same dimension as text chunks
+            vector_size=settings.embedding_dimension,  # Same dimension as text chunks
         )
         self.embedder = embedder or TextEmbedder()
         

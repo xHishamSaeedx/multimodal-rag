@@ -73,6 +73,7 @@ class Settings(BaseSettings):
         kwargs.setdefault('embedding_model', embedding_config.get('model', "intfloat/e5-base-v2"))
         kwargs.setdefault('embedding_device', embedding_config.get('device', "cpu"))
         kwargs.setdefault('embedding_batch_size', embedding_config.get('batch_size', 32))
+        kwargs.setdefault('embedding_dimension', embedding_config.get('dimension', 768))
 
         # Vision Processing Settings
         vision_config = config_data.get('vision', {})
@@ -82,7 +83,7 @@ class Settings(BaseSettings):
         kwargs.setdefault('captioning_model', vision_config.get('captioning_model', "Salesforce/blip-image-captioning-base"))
 
         # Image Embedding Settings
-        image_embedding_config = vision_config.get('image_embedding', {})
+        image_embedding_config = config_data.get('vision', {}).get('image_embedding', {})
         kwargs.setdefault('image_embedding_model_type', image_embedding_config.get('model_type', "clip"))
         kwargs.setdefault('image_embedding_model_name', image_embedding_config.get('model_name', "sentence-transformers/clip-ViT-L-14"))
 
@@ -97,6 +98,38 @@ class Settings(BaseSettings):
 
         # Initialize with merged kwargs
         super().__init__(**kwargs)
+
+    def reload_from_config(self):
+        """
+        Reload settings from the config.yaml file.
+
+        This method re-reads the config.yaml file and updates the settings
+        with new values. Useful for development when config changes need
+        to be reflected without restarting the Python process.
+        """
+        # Load fresh config from YAML file
+        config_data = load_config_yaml()
+
+        # Update vision config settings
+        vision_config = config_data.get('vision', {})
+        image_embedding_config = config_data.get('image_embedding', {})
+
+        # Update image embedding settings
+        self.image_embedding_model_type = image_embedding_config.get('model_type', "clip")
+        self.image_embedding_model_name = image_embedding_config.get('model_name', "sentence-transformers/clip-ViT-L-14")
+
+        # Update other vision settings if needed
+        self.vision_processing_mode = vision_config.get('processing_mode', "captioning")
+        self.vision_llm_provider = vision_config.get('llm_provider', "openai")
+        self.vision_llm_model = vision_config.get('llm_model', "gpt-4o")
+        self.captioning_model = vision_config.get('captioning_model', "Salesforce/blip-image-captioning-base")
+
+        # Update embedding settings
+        embedding_config = config_data.get('embeddings', {})
+        self.embedding_model = embedding_config.get('model', "intfloat/e5-base-v2")
+        self.embedding_device = embedding_config.get('device', "cpu")
+        self.embedding_batch_size = embedding_config.get('batch_size', 32)
+        self.embedding_dimension = embedding_config.get('dimension', 768)
 
     # API Settings
     api_title: str
@@ -144,6 +177,7 @@ class Settings(BaseSettings):
     embedding_model: str
     embedding_device: str
     embedding_batch_size: int
+    embedding_dimension: int
 
     # Groq Settings (for Answer Generation) - API key and model from env
     groq_api_key: Optional[str] = None

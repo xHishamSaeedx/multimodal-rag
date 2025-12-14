@@ -23,11 +23,11 @@ qdrant:
   # Multiple collections created by backend/scripts/qdrant/init_qdrant.py
   collections:
     text_chunks:
-      vector_size: 768 # e5-base-v2 dimensions
+      vector_size: 1024 # multilingual-e5-large dimensions
     table_chunks:
-      vector_size: 768 # Same as text embeddings
+      vector_size: 1024 # Same as text embeddings
     image_chunks:
-      vector_size: 768 # CLIP base (can be 768 for SigLIP base or 1024 for SigLIP large)
+      vector_size: 768 # CLIP ViT-L-14 (768d) - matches clip-ViT-L-14 embedding dimensions
 
 # BM25 Sparse Index - Elasticsearch
 elasticsearch:
@@ -75,8 +75,8 @@ llms:
 
 # Text Embedding Models
 embeddings:
-  model: intfloat/e5-base-v2
-  dimension: 768 # Embedding vector size
+  model: intfloat/multilingual-e5-large
+  dimension: 1024 # Embedding vector size
   device: cuda # Options: cpu, cuda
   batch_size: 32 # Batch size for embedding generation
 
@@ -93,10 +93,11 @@ vision:
   # Captioning Model (when processing_mode = captioning)
   captioning_model: Salesforce/blip-image-captioning-base
 
-  # Image Embedding Model Configuration
-  image_embedding:
-    model_type: clip # Options: clip, siglip
-    model_name: sentence-transformers/clip-ViT-L-14 # CLIP: clip-ViT-L-14 (768d), clip-ViT-B-32 (512d); SigLIP: vit_large_patch16_siglip_384 (1024d), vit_base_patch16_siglip_224 (768d)
+# Image Embedding Model Configuration
+image_embedding:
+  model_type: clip # Options: clip, siglip
+  model_name: clip-ViT-L-14 # CLIP: clip-ViT-L-14 (768d), clip-ViT-B-32 (512d); SigLIP: vit_large_patch16_siglip_384 (1024d), vit_base_patch16_siglip_224 (768d)
+  dimension: 768 # Embedding vector size - automatically determined from model_name
 
 # ============================================
 # API Configuration

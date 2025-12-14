@@ -235,10 +235,14 @@ def recreate_qdrant_collections(verify_only: bool = False) -> bool:
         print("✅ Connected to Qdrant")
 
         # Get collections config directly from config.yaml
+        # Use embedding dimension from config for text and table chunks
+        embedding_dimension = config_data.get('embeddings', {}).get('dimension', 768)
+        # Use image embedding dimension from config for image chunks
+        image_embedding_dimension = config_data.get('image_embedding', {}).get('dimension', 512)
         collections_config = qdrant_config.get('collections', {
-            'text_chunks': {'vector_size': 768},
-            'table_chunks': {'vector_size': 768},
-            'image_chunks': {'vector_size': 512}
+            'text_chunks': {'vector_size': embedding_dimension},
+            'table_chunks': {'vector_size': embedding_dimension},
+            'image_chunks': {'vector_size': image_embedding_dimension}
         })
 
         print(f"📋 Will process {len(collections_config)} collections from config:")
