@@ -46,12 +46,64 @@ async def readiness_check() -> Dict[str, Any]:
 async def liveness_check() -> Dict[str, Any]:
     """
     Liveness check endpoint.
-    
+
     Checks if the service is alive.
     """
     return {
         "status": "alive",
         "timestamp": datetime.utcnow().isoformat()
+    }
+
+
+@router.get("/models")
+async def get_current_models() -> Dict[str, Any]:
+    """
+    Get current models configuration.
+
+    Returns the currently configured models for different components
+    (text embeddings, image embeddings, LLMs, etc.) along with basic info.
+    """
+    from app.core.config import settings
+
+    # Get current model configurations
+    models_config = {
+        "text_embedding": {
+            "model": settings.embedding_model,
+            "dimension": settings.embedding_dimension,
+            "device": settings.embedding_device,
+        },
+        "image_embedding": {
+            "model_type": settings.image_embedding_model_type,
+            "model_name": settings.image_embedding_model_name,
+        },
+        "llm": {
+            "provider": settings.vision_llm_provider,
+            "model": settings.vision_llm_model,
+        },
+        "captioning": {
+            "model": settings.captioning_model,
+        },
+        "vision_processing": {
+            "mode": settings.vision_processing_mode,
+        },
+        "retrieval_types": [
+            "sparse",  # BM25/Elasticsearch
+            "dense",   # Vector similarity
+            "image",   # CLIP/SigLIP
+            "table",   # Structured data
+            "graph"    # Knowledge graph (if enabled)
+        ] if settings.neo4j_enabled else [
+            "sparse",
+            "dense",
+            "image",
+            "table"
+        ]
+    }
+
+    return {
+        "status": "success",
+        "timestamp": datetime.utcnow().isoformat(),
+        "models": models_config
     }
 
 

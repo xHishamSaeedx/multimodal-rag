@@ -1,0 +1,398 @@
+.metrics {
+  background-color: #ffffff;
+  color: #000000;
+  padding: 8rem 2rem 6rem;
+  min-height: 100vh;
+}
+
+.metrics-container {
+  max-width: 1400px;
+  margin: 0 auto;
+  width: 100%;
+}
+
+.metrics-navigation {
+  display: flex;
+  justify-content: center;
+  margin-bottom: 4rem;
+  gap: 2rem;
+  flex-wrap: wrap;
+}
+
+.nav-tab {
+  background: none;
+  border: 2px solid #000000;
+  color: #000000;
+  padding: 0.75rem 2rem;
+  font-size: 0.95rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  font-family: inherit;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  border-radius: 0;
+}
+
+.nav-tab:hover {
+  background-color: #000000;
+  color: #ffffff;
+  transform: translateY(-2px);
+}
+
+.nav-tab.active {
+  background-color: #000000;
+  color: #ffffff;
+}
+
+.metrics-content {
+  /* No background container needed, content flows directly */
+}
+
+/* Overview Tab */
+.metrics-overview {
+  /* Direct content styling */
+}
+
+.metrics-header {
+  text-align: center;
+  margin-bottom: 4rem;
+  max-width: 800px;
+  margin-left: auto;
+  margin-right: auto;
+}
+
+.metrics-header h2 {
+  font-size: clamp(2rem, 4vw, 3rem);
+  font-weight: 800;
+  margin: 0 0 1rem 0;
+  letter-spacing: -0.02em;
+  color: #000000;
+}
+
+.metrics-header p {
+  font-size: clamp(1rem, 1.5vw, 1.25rem);
+  color: #666666;
+  line-height: 1.7;
+  margin: 0;
+}
+
+.metrics-charts {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(400px, 1fr));
+  gap: 2rem;
+  margin-bottom: 4rem;
+}
+
+.chart-container {
+  background-color: #fafafa;
+  border: 1px solid #e5e5e5;
+  padding: 2rem;
+  border-radius: 8px;
+  transition: all 0.3s ease;
+}
+
+.chart-container:hover {
+  transform: translateY(-4px);
+  border-color: #000000;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.1);
+}
+
+.chart-title {
+  font-size: 1.25rem;
+  font-weight: 700;
+  margin: 0 0 1.5rem 0;
+  color: #000000;
+  text-align: center;
+}
+
+.metrics-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+  gap: 2rem;
+  margin-bottom: 5rem;
+}
+
+.metric-card {
+  background-color: #fafafa;
+  border: 1px solid #e5e5e5;
+  padding: 2.5rem 2rem;
+  transition: all 0.3s ease;
+  position: relative;
+}
+
+.metric-card:hover {
+  transform: translateY(-4px);
+  border-color: #000000;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.1);
+}
+
+.metric-header h3 {
+  font-size: 1.5rem;
+  font-weight: 700;
+  margin: 0 0 1rem 0;
+  color: #000000;
+  letter-spacing: -0.01em;
+}
+
+.model-info {
+  font-size: 0.9rem;
+  color: #666666;
+  margin-bottom: 1.5rem;
+}
+
+.metric-stats {
+  margin-bottom: 2rem;
+}
+
+.stat-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 1rem;
+}
+
+.stat-label {
+  font-size: 1rem;
+  color: #666666;
+}
+
+.stat-value {
+  font-weight: 700;
+  font-size: 1.1rem;
+}
+
+.stat-value.time {
+  color: #28a745;
+}
+
+.stat-value.relevance {
+  color: #007bff;
+}
+
+.performance-rating {
+  padding-top: 1.5rem;
+  border-top: 1px solid #e5e5e5;
+}
+
+.rating-label {
+  font-size: 0.9rem;
+  color: #666666;
+  margin-bottom: 0.5rem;
+  display: block;
+}
+
+.rating-value {
+  font-weight: 700;
+  color: #000000;
+  font-size: 1.1rem;
+}
+
+.metrics-summary {
+  text-align: center;
+  padding-top: 4rem;
+  border-top: 1px solid #e5e5e5;
+}
+
+.metrics-summary h3 {
+  font-size: 1.5rem;
+  font-weight: 700;
+  margin: 0 0 2rem 0;
+  color: #000000;
+}
+
+.insights-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+  gap: 2rem;
+}
+
+.insight-card {
+  background-color: #000000;
+  color: #ffffff;
+  padding: 2rem;
+  border-radius: 8px;
+  text-align: center;
+  transition: all 0.3s ease;
+}
+
+.insight-card:hover {
+  transform: translateY(-4px);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.15);
+}
+
+.insight-card h4 {
+  font-size: 1.25rem;
+  margin-bottom: 1rem;
+  font-weight: 700;
+}
+
+.insight-card p {
+  opacity: 0.9;
+  line-height: 1.6;
+  margin: 0;
+}
+
+/* Comparison Tab */
+.metrics-comparison {
+  /* Direct content styling */
+}
+
+.comparison-charts {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(500px, 1fr));
+  gap: 2rem;
+  margin-bottom: 4rem;
+}
+
+.comparison-table {
+  margin-bottom: 3rem;
+  overflow-x: auto;
+}
+
+.comparison-table table {
+  width: 100%;
+  border-collapse: collapse;
+  background: white;
+  border-radius: 8px;
+  overflow: hidden;
+  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.05);
+  border: 1px solid #e5e5e5;
+}
+
+.comparison-table th,
+.comparison-table td {
+  padding: 1rem;
+  text-align: left;
+  border-bottom: 1px solid #e5e5e5;
+}
+
+.comparison-table th {
+  background: #fafafa;
+  font-weight: 700;
+  color: #000000;
+}
+
+.model-name {
+  font-weight: 700;
+  color: #000000;
+}
+
+.time-cell {
+  font-weight: 700;
+  color: #28a745;
+}
+
+.relevance-cell {
+  font-weight: 700;
+  color: #007bff;
+}
+
+.dimensions-cell {
+  color: #666666;
+}
+
+.improvement-cell {
+  font-weight: 600;
+  color: #000000;
+}
+
+.model-insights {
+  margin-top: 4rem;
+  padding-top: 3rem;
+  border-top: 1px solid #e5e5e5;
+}
+
+.model-insights h3 {
+  font-size: 1.5rem;
+  font-weight: 700;
+  margin: 0 0 2rem 0;
+  color: #000000;
+  text-align: center;
+}
+
+.insights-list {
+  display: grid;
+  gap: 1.5rem;
+}
+
+.insight-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 1.5rem;
+  background: #fafafa;
+  padding: 2rem;
+  border-radius: 8px;
+  border-left: 4px solid #000000;
+  transition: all 0.3s ease;
+}
+
+.insight-item:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+}
+
+.insight-icon {
+  font-size: 1.5rem;
+  flex-shrink: 0;
+}
+
+.insight-content h4 {
+  font-size: 1.1rem;
+  font-weight: 700;
+  color: #000000;
+  margin-bottom: 0.5rem;
+}
+
+.insight-content p {
+  color: #666666;
+  line-height: 1.6;
+  margin: 0;
+}
+
+/* Responsive Design */
+@media (max-width: 768px) {
+  .metrics {
+    padding: 6rem 1rem 4rem;
+  }
+
+  .metrics-navigation {
+    margin-bottom: 3rem;
+    gap: 1rem;
+  }
+
+  .nav-tab {
+    padding: 0.6rem 1.5rem;
+    font-size: 0.85rem;
+  }
+
+  .metrics-charts,
+  .comparison-charts {
+    grid-template-columns: 1fr;
+  }
+
+  .metrics-grid {
+    grid-template-columns: 1fr;
+    gap: 1.5rem;
+    margin-bottom: 3rem;
+  }
+
+  .metric-card {
+    padding: 2rem 1.5rem;
+  }
+
+  .comparison-table {
+    font-size: 0.875rem;
+  }
+
+  .comparison-table th,
+  .comparison-table td {
+    padding: 0.75rem 0.5rem;
+  }
+
+  .insight-item {
+    flex-direction: column;
+    text-align: center;
+    padding: 1.5rem;
+  }
+}

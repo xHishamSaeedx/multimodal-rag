@@ -1,11 +1,12 @@
-import axios from 'axios';
+import axios from "axios";
 
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000';
+const API_BASE_URL =
+  import.meta.env.VITE_API_BASE_URL || "http://localhost:8000";
 
 const apiClient = axios.create({
   baseURL: API_BASE_URL,
   headers: {
-    'Content-Type': 'application/json',
+    "Content-Type": "application/json",
   },
 });
 
@@ -13,7 +14,7 @@ export interface IngestResponse {
   success: boolean;
   message: string;
   document_id?: string | null;
-  object_key?: string | null;  // MinIO object key (path) where document is stored
+  object_key?: string | null; // MinIO object key (path) where document is stored
   file_name: string;
   file_type: string;
   file_size: number;
@@ -56,12 +57,12 @@ export interface SourceInfo {
   document_id: string;
   filename: string;
   chunk_index: number;
-  chunk_text: string;  // Truncated preview
-  full_chunk_text: string;  // Full chunk text
+  chunk_text: string; // Truncated preview
+  full_chunk_text: string; // Full chunk text
   citation: string;
   metadata?: Record<string, any> | null;
-  image_path?: string | null;  // Supabase storage path for image chunks
-  image_url?: string | null;  // Signed URL for image access (temporary)
+  image_path?: string | null; // Supabase storage path for image chunks
+  image_url?: string | null; // Signed URL for image access (temporary)
 }
 
 export interface QueryRequest {
@@ -95,6 +96,33 @@ export interface QueryResponse {
   } | null;
 }
 
+export interface ModelsConfig {
+  status: string;
+  timestamp: string;
+  models: {
+    text_embedding: {
+      model: string;
+      dimension: number;
+      device: string;
+    };
+    image_embedding: {
+      model_type: string;
+      model_name: string;
+    };
+    llm: {
+      provider: string;
+      model: string;
+    };
+    captioning: {
+      model: string;
+    };
+    vision_processing: {
+      mode: string;
+    };
+    retrieval_types: string[];
+  };
+}
+
 export const api = {
   /**
    * Upload a single document for ingestion
@@ -109,49 +137,53 @@ export const api = {
     }
   ): Promise<IngestResponse> => {
     const formData = new FormData();
-    formData.append('file', file);
-    
+    formData.append("file", file);
+
     // Add processor configuration options
     // Explicitly convert boolean to string, defaulting to true if undefined
     // Ensure we always send 'true' or 'false' (lowercase strings) as expected by backend
-    const enableText = options?.enableText !== undefined && options.enableText !== null 
-      ? String(options.enableText).toLowerCase() 
-      : 'true';
-    const enableTables = options?.enableTables !== undefined && options.enableTables !== null
-      ? String(options.enableTables).toLowerCase()
-      : 'true';
-    const enableImages = options?.enableImages !== undefined && options.enableImages !== null
-      ? String(options.enableImages).toLowerCase()
-      : 'true';
-    const enableGraph = options?.enableGraph !== undefined && options.enableGraph !== null
-      ? String(options.enableGraph).toLowerCase()
-      : 'true';
-    
-    formData.append('enable_text', enableText);
-    formData.append('enable_tables', enableTables);
-    formData.append('enable_images', enableImages);
-    formData.append('enable_graph', enableGraph);
-    
+    const enableText =
+      options?.enableText !== undefined && options.enableText !== null
+        ? String(options.enableText).toLowerCase()
+        : "true";
+    const enableTables =
+      options?.enableTables !== undefined && options.enableTables !== null
+        ? String(options.enableTables).toLowerCase()
+        : "true";
+    const enableImages =
+      options?.enableImages !== undefined && options.enableImages !== null
+        ? String(options.enableImages).toLowerCase()
+        : "true";
+    const enableGraph =
+      options?.enableGraph !== undefined && options.enableGraph !== null
+        ? String(options.enableGraph).toLowerCase()
+        : "true";
+
+    formData.append("enable_text", enableText);
+    formData.append("enable_tables", enableTables);
+    formData.append("enable_images", enableImages);
+    formData.append("enable_graph", enableGraph);
+
     // Debug: log what we're sending (with original values for debugging)
-    console.log('API uploadDocument - Options received:', {
+    console.log("API uploadDocument - Options received:", {
       enableText: options?.enableText,
       enableTables: options?.enableTables,
       enableImages: options?.enableImages,
       enableGraph: options?.enableGraph,
     });
-    console.log('API uploadDocument - Values being sent to backend:', { 
-      enableText, 
-      enableTables, 
-      enableImages, 
-      enableGraph 
+    console.log("API uploadDocument - Values being sent to backend:", {
+      enableText,
+      enableTables,
+      enableImages,
+      enableGraph,
     });
 
     const response = await apiClient.post<IngestResponse>(
-      '/api/v1/ingest',
+      "/api/v1/ingest",
       formData,
       {
         headers: {
-          'Content-Type': 'multipart/form-data',
+          "Content-Type": "multipart/form-data",
         },
       }
     );
@@ -165,15 +197,15 @@ export const api = {
   uploadDocuments: async (files: File[]): Promise<IngestResponse[]> => {
     const formData = new FormData();
     files.forEach((file) => {
-      formData.append('files', file);
+      formData.append("files", file);
     });
 
     const response = await apiClient.post<IngestResponse[]>(
-      '/api/v1/ingest/batch',
+      "/api/v1/ingest/batch",
       formData,
       {
         headers: {
-          'Content-Type': 'multipart/form-data',
+          "Content-Type": "multipart/form-data",
         },
       }
     );
@@ -185,7 +217,7 @@ export const api = {
    * Health check endpoint
    */
   healthCheck: async () => {
-    const response = await apiClient.get('/api/v1/health');
+    const response = await apiClient.get("/api/v1/health");
     return response.data;
   },
 
@@ -199,7 +231,7 @@ export const api = {
     limit?: number;
   }): Promise<DocumentListResponse> => {
     const response = await apiClient.get<DocumentListResponse>(
-      '/api/v1/documents',
+      "/api/v1/documents",
       { params }
     );
     return response.data;
@@ -218,7 +250,7 @@ export const api = {
       `/api/v1/documents/${encodedKey}`,
       {
         params: { download },
-        responseType: 'blob',
+        responseType: "blob",
       }
     );
     return response.data;
@@ -233,9 +265,9 @@ export const api = {
   ): Promise<void> => {
     const blob = await api.getDocument(objectKey, true);
     const url = window.URL.createObjectURL(blob);
-    const link = document.createElement('a');
+    const link = document.createElement("a");
     link.href = url;
-    link.download = filename || objectKey.split('/').pop() || 'document';
+    link.download = filename || objectKey.split("/").pop() || "document";
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
@@ -261,7 +293,7 @@ export const api = {
    */
   query: async (request: QueryRequest): Promise<QueryResponse> => {
     const response = await apiClient.post<QueryResponse>(
-      '/api/v1/query',
+      "/api/v1/query",
       request
     );
     return response.data;
@@ -286,7 +318,14 @@ export const api = {
     });
     return response.data.image_url;
   },
+
+  /**
+   * Get current models configuration
+   */
+  getCurrentModels: async (): Promise<ModelsConfig> => {
+    const response = await apiClient.get<ModelsConfig>("/api/v1/health/models");
+    return response.data;
+  },
 };
 
 export default api;
-

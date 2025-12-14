@@ -53,16 +53,12 @@ minio:
 # Large Language Models (LLMs)
 llms:
   # Primary LLM for answer generation (configurable provider)
-  primary_provider: groq # Options: groq, openai, anthropic, ollama
+  primary_provider: groq # Options: groq, anthropic, ollama
 
   # Provider-specific configurations (API keys loaded from environment)
   groq:
     api_key: ${GROQ_API_KEY} # From environment variable
     model: openai/gpt-oss-20b
-
-  openai:
-    api_key: ${OPENAI_API_KEY} # From environment variable
-    model: gpt-4-turbo-preview
 
   # Alternative providers (commented out)
   # anthropic:
@@ -75,7 +71,7 @@ llms:
 
 # Text Embedding Models
 embeddings:
-  model: intfloat/multilingual-e5-large
+  model: Thenlper/GTE-Large
   dimension: 1024 # Embedding vector size
   device: cuda # Options: cpu, cuda
   batch_size: 32 # Batch size for embedding generation
