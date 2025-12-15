@@ -10,6 +10,7 @@ from app.core.config import settings
 from app.api.routes import api_router
 from app.api.middleware import CorrelationIDMiddleware
 from app.utils.logging import get_logger, configure_logging
+from app.utils import metrics  # Import metrics to register them with Prometheus
 
 # Configure structured logging with JSON output
 configure_logging(
