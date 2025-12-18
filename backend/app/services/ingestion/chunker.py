@@ -6,6 +6,7 @@ Uses langchain's RecursiveCharacterTextSplitter for structure preservation.
 """
 
 import logging
+import time
 from dataclasses import dataclass, field
 from typing import List, Optional, Dict, Any
 from datetime import datetime
@@ -16,6 +17,7 @@ except ImportError:
     RecursiveCharacterTextSplitter = None
 
 from app.utils.exceptions import BaseAppException
+from app.utils.metrics import text_chunking_duration_seconds
 
 logger = logging.getLogger(__name__)
 
@@ -175,6 +177,9 @@ class TextChunker:
             return []
         
         try:
+            # Start timing for chunking process
+            chunking_start = time.time()
+            
             # Normalize text for better chunking
             if preserve_structure:
                 text = self._normalize_text(text)
@@ -224,8 +229,15 @@ class TextChunker:
                 
                 chunks.append(chunk)
             
+            # Calculate chunking duration
+            chunking_duration = time.time() - chunking_start
+            
+            # Record metrics (use file_type from metadata if available)
+            file_type = metadata.get("document_type", "unknown") if metadata else "unknown"
+            text_chunking_duration_seconds.labels(file_type=file_type).observe(chunking_duration)
+            
             logger.info(
-                f"Created {len(chunks)} chunks with average size: "
+                f"Created {len(chunks)} chunks in {chunking_duration:.2f}s with average size: "
                 f"{sum(c.token_count for c in chunks) // max(1, len(chunks))} tokens"
             )
             

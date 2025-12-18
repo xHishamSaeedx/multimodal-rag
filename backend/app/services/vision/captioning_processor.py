@@ -7,12 +7,17 @@ This is a cost-effective approach that runs locally.
 
 import logging
 import io
+import time
 from typing import Optional
 from PIL import Image
 
 from app.services.vision.processor import VisionProcessor, VisionResult
 from app.core.config import settings
 from app.utils.exceptions import VisionProcessingError
+from app.utils.metrics import (
+    image_captioning_duration_seconds,
+    image_captions_generated_total,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -135,6 +140,9 @@ class CaptioningProcessor(VisionProcessor):
             )
         
         try:
+            # Start timing for the entire captioning process
+            captioning_start = time.time()
+            
             self._load_model()
             
             # Load image from bytes
@@ -157,7 +165,8 @@ class CaptioningProcessor(VisionProcessor):
                 if self._device == "cuda":
                     inputs = {k: v.to(self._device) for k, v in inputs.items()}
                 
-                # Generate caption
+                # Generate caption (measure only the generation time)
+                generation_start = time.time()
                 with torch.no_grad():
                     out = self._model.generate(
                         **inputs,
@@ -165,11 +174,19 @@ class CaptioningProcessor(VisionProcessor):
                         num_beams=3,
                         early_stopping=True
                     )
+                generation_duration = time.time() - generation_start
                 
                 # Decode caption
                 caption = self._processor.decode(out[0], skip_special_tokens=True)
                 
-                logger.debug(f"Generated caption: {caption[:100]}...")
+                # Calculate total captioning duration
+                captioning_duration = time.time() - captioning_start
+                
+                # Record metrics
+                image_captioning_duration_seconds.labels(model=self.model_name).observe(captioning_duration)
+                image_captions_generated_total.labels(model=self.model_name).inc()
+                
+                logger.debug(f"Generated caption in {captioning_duration:.2f}s (generation: {generation_duration:.2f}s): {caption[:50]}...")
                 
                 return VisionResult(
                     description=caption,
@@ -177,6 +194,8 @@ class CaptioningProcessor(VisionProcessor):
                         "model": self.model_name,
                         "mode": "captioning",
                         "device": self._device,
+                        "captioning_duration": captioning_duration,
+                        "generation_duration": generation_duration,
                     },
                     confidence=None,  # BLIP doesn't provide confidence scores
                 )

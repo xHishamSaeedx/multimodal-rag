@@ -8,6 +8,7 @@ Based on the proof of concept from scripts/extract_images.py.
 import io
 import logging
 import hashlib
+import time
 from pathlib import Path
 from typing import BinaryIO, List, Dict, Any, Optional
 from dataclasses import dataclass, field
@@ -45,6 +46,10 @@ from app.utils.exceptions import (
     ExtractionError,
     UnsupportedFileTypeError,
     FileReadError,
+)
+from app.utils.metrics import (
+    image_ocr_duration_seconds,
+    image_ocr_processed_total,
 )
 
 logger = logging.getLogger(__name__)
@@ -148,6 +153,9 @@ class ImageExtractor:
             return None
         
         try:
+            # Start timing OCR
+            ocr_start = time.time()
+            
             reader = self._get_easyocr_reader()
             if reader is None:
                 return None
@@ -162,11 +170,24 @@ class ImageExtractor:
             
             results = reader.readtext(image_array)
             
+            # Calculate OCR duration
+            ocr_duration = time.time() - ocr_start
+            
+            # Record metrics
+            image_ocr_duration_seconds.observe(ocr_duration)
+            image_ocr_processed_total.inc()
+            
             # Combine all detected text
             if results:
                 text_parts = [text for (bbox, text, confidence) in results if text.strip()]
                 combined_text = ' '.join(text_parts)
-                return combined_text.strip() if combined_text.strip() else None
+                extracted_text = combined_text.strip() if combined_text.strip() else None
+                if self.ocr_verbose:
+                    logger.info(f"OCR completed in {ocr_duration:.2f}s, extracted {len(extracted_text) if extracted_text else 0} characters")
+                return extracted_text
+            
+            if self.ocr_verbose:
+                logger.info(f"OCR completed in {ocr_duration:.2f}s, no text found")
             return None
             
         except Exception as e:

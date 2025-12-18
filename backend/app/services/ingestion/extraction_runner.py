@@ -7,6 +7,7 @@ Supports both synchronous (ThreadPoolExecutor) and asynchronous (asyncio) execut
 
 import asyncio
 import logging
+import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import Tuple
 from pathlib import Path
@@ -17,6 +18,13 @@ from app.services.ingestion.table_extractor import TableExtractor, ExtractedTabl
 from app.services.ingestion.image_extractor import ImageExtractor, ExtractedImage
 from app.services.ingestion.table_processor import TableProcessor, ProcessedTable
 from app.utils.exceptions import ExtractionError
+from app.utils.metrics import (
+    text_extraction_duration_seconds,
+    table_extraction_duration_seconds,
+    tables_extracted_total,
+    image_extraction_duration_seconds,
+    images_extracted_total,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -87,11 +95,16 @@ class ExtractionRunner:
         try:
             logger.info(f"Starting parallel extraction (sync): {file_name}")
             
+            # Infer file type for metrics
+            if file_type is None:
+                file_type = self.text_extractor._infer_file_type(Path(file_name)) if self.text_extractor else "unknown"
+            
             # Create a copy of file_bytes for each extraction (some libraries may consume it)
             # In practice, most libraries work with BytesIO which doesn't consume the bytes
             with ThreadPoolExecutor(max_workers=self.max_workers) as executor:
-                # Submit all extraction tasks
+                # Submit all extraction tasks with timing wrappers
                 futures = {}
+                future_start_times = {}
                 
                 text_future = None
                 if self.enable_text and self.text_extractor:
@@ -102,6 +115,7 @@ class ExtractionRunner:
                         file_type=file_type,
                     )
                     futures[text_future] = "text"
+                    future_start_times[text_future] = time.time()
                 
                 table_future = None
                 if self.enable_tables and self.table_extractor:
@@ -112,6 +126,7 @@ class ExtractionRunner:
                         file_type=file_type,
                     )
                     futures[table_future] = "table"
+                    future_start_times[table_future] = time.time()
                 
                 image_future = None
                 if self.extract_images and self.image_extractor:
@@ -122,6 +137,7 @@ class ExtractionRunner:
                         file_type=file_type,
                     )
                     futures[image_future] = "image"
+                    future_start_times[image_future] = time.time()
                 
                 # Wait for all to complete and collect results
                 extracted_content = None
@@ -132,14 +148,26 @@ class ExtractionRunner:
                     try:
                         result = future.result()
                         extraction_type = futures[future]
+                        extraction_duration = time.time() - future_start_times[future]
                         
                         # Determine which extraction this is based on result type
                         if extraction_type == "text":
                             extracted_content = result
+                            # Record text extraction metrics
+                            text_extraction_duration_seconds.labels(file_type=file_type).observe(extraction_duration)
+                            logger.info(f"✓ Text extraction completed in {extraction_duration:.2f}s")
                         elif extraction_type == "table":
                             extracted_tables = result
+                            # Record table extraction metrics (per document, not per table)
+                            table_extraction_duration_seconds.labels(file_type=file_type).observe(extraction_duration)
+                            tables_extracted_total.labels(file_type=file_type).inc(len(extracted_tables))
+                            logger.info(f"✓ Table extraction completed in {extraction_duration:.2f}s ({len(extracted_tables)} tables)")
                         elif extraction_type == "image":
                             extracted_images = result
+                            # Record image extraction metrics (per document, not per image)
+                            image_extraction_duration_seconds.labels(file_type=file_type).observe(extraction_duration)
+                            images_extracted_total.labels(file_type=file_type).inc(len(extracted_images))
+                            logger.info(f"✓ Image extraction completed in {extraction_duration:.2f}s ({len(extracted_images)} images)")
                     
                     except Exception as e:
                         # Determine which extraction failed

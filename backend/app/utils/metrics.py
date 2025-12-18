@@ -82,6 +82,73 @@ document_processing_errors_total = Counter(
     ['error_type', 'file_type']
 )
 
+# Extraction timing metrics
+text_extraction_duration_seconds = Histogram(
+    'text_extraction_duration_seconds',
+    'Text extraction duration in seconds per document',
+    ['file_type'],
+    buckets=[0.1, 0.5, 1.0, 2.0, 5.0, 10.0, 30.0, 60.0, 120.0]
+)
+
+table_extraction_duration_seconds = Histogram(
+    'table_extraction_duration_seconds',
+    'Table extraction duration in seconds per table',
+    ['file_type'],
+    buckets=[0.01, 0.05, 0.1, 0.25, 0.5, 1.0, 2.5, 5.0, 10.0]
+)
+
+tables_extracted_total = Counter(
+    'tables_extracted_total',
+    'Total number of tables extracted',
+    ['file_type']
+)
+
+image_extraction_duration_seconds = Histogram(
+    'image_extraction_duration_seconds',
+    'Image extraction duration in seconds per image',
+    ['file_type'],
+    buckets=[0.01, 0.05, 0.1, 0.25, 0.5, 1.0, 2.5, 5.0]
+)
+
+images_extracted_total = Counter(
+    'images_extracted_total',
+    'Total number of images extracted',
+    ['file_type']
+)
+
+# Vision processing metrics
+image_captioning_duration_seconds = Histogram(
+    'image_captioning_duration_seconds',
+    'Image captioning duration in seconds per image',
+    ['model'],
+    buckets=[0.1, 0.5, 1.0, 2.0, 5.0, 10.0, 30.0]
+)
+
+image_captions_generated_total = Counter(
+    'image_captions_generated_total',
+    'Total number of image captions generated',
+    ['model']
+)
+
+image_ocr_duration_seconds = Histogram(
+    'image_ocr_duration_seconds',
+    'OCR processing duration in seconds per image',
+    buckets=[0.1, 0.5, 1.0, 2.0, 5.0, 10.0, 30.0]
+)
+
+image_ocr_processed_total = Counter(
+    'image_ocr_processed_total',
+    'Total number of images processed with OCR'
+)
+
+# Text chunking metrics
+text_chunking_duration_seconds = Histogram(
+    'text_chunking_duration_seconds',
+    'Text chunking duration in seconds',
+    ['file_type'],
+    buckets=[0.01, 0.05, 0.1, 0.25, 0.5, 1.0, 2.5, 5.0]
+)
+
 # ============================================================================
 # Retrieval Metrics
 # ============================================================================
