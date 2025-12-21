@@ -8,9 +8,11 @@ const About: React.FC = () => {
         <div className="about-header">
           <h2 className="about-title">Complete ML Research Implementation</h2>
           <p className="about-subtitle">
-            Full-stack ML demonstration showcasing advanced retrieval
-            strategies, multimodal processing, and comprehensive observability
-            for research and educational purposes
+            Comprehensive multimodal RAG implementation demonstrating advanced
+            retrieval architectures, state-of-the-art embedding models, and
+            complete MLOps observability stack. Showcases modern ML engineering
+            practices with FastAPI, container orchestration, and monitoring for
+            educational and research applications.
           </p>
         </div>
 

@@ -29,20 +29,12 @@ const Header: React.FC = () => {
             Home
           </Link>
           <Link
-            to="/documents"
+            to="/rag"
             className={`nav-link ${
-              location.pathname === "/documents" ? "active" : ""
+              location.pathname === "/rag" ? "active" : ""
             }`}
           >
-            Documents
-          </Link>
-          <Link
-            to="/chat"
-            className={`nav-link ${
-              location.pathname === "/chat" ? "active" : ""
-            }`}
-          >
-            Chat
+            RAG
           </Link>
           <Link
             to="/metrics"

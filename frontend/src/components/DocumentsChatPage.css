@@ -1,0 +1,874 @@
+.documents-chat-page {
+  padding: 0;
+  min-height: 100vh;
+  background-color: #ffffff;
+}
+
+.documents-chat-container {
+  display: flex;
+  width: 100%;
+  height: 100vh;
+  gap: 0;
+  max-width: 100%;
+  margin: 0;
+  padding: 0;
+  overflow: hidden;
+}
+
+.documents-section {
+  width: 25%;
+  flex: 0 0 25%;
+  background-color: #ffffff;
+  border-right: 1px solid #e5e5e5;
+  overflow-y: auto;
+  overflow-x: hidden;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  transition: all 0.3s ease;
+  position: relative;
+}
+
+.documents-section-content {
+  padding: 1rem 1.25rem 2rem 1.25rem;
+  padding-top: calc(80px - 1rem);
+  display: flex;
+  flex-direction: column;
+  min-height: min-content;
+}
+
+.documents-section-title {
+  font-size: 1.5rem;
+  font-weight: 800;
+  color: #000000;
+  margin: 0 0 1rem 0;
+  letter-spacing: -0.01em;
+  text-align: center;
+}
+
+.chat-section {
+  width: 75%;
+  flex: 0 0 75%;
+  background-color: #ffffff;
+  overflow: hidden;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+}
+
+.chat-section .chat-container {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  padding: 2rem;
+  padding-top: calc(2rem + 80px);
+  max-width: 100% !important;
+  margin: 0 !important;
+  min-height: auto !important;
+  border-radius: 0 !important;
+  box-shadow: none !important;
+  overflow: hidden;
+}
+
+/* Adjust document components for sidebar layout */
+.documents-section .document-upload-container {
+  max-width: 100%;
+  margin-bottom: 2rem;
+}
+
+.documents-section .document-list-container {
+  max-width: 100%;
+  padding: 0;
+  background-color: transparent;
+  border-radius: 0;
+  box-shadow: none;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+/* Document List Header - Sidebar Style */
+.documents-section .document-list-header {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 1rem;
+  margin-bottom: 1.5rem;
+  flex-shrink: 0;
+}
+
+.documents-section .document-list-header h1 {
+  font-size: 1.25rem;
+  font-weight: 800;
+  color: #000000;
+  margin: 0;
+  letter-spacing: -0.01em;
+  width: 100%;
+}
+
+.documents-section .refresh-button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  padding: 0.5rem 1rem;
+  background-color: #f5f5f5;
+  color: #000000;
+  border: 1px solid #e5e5e5;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 0.85rem;
+  font-weight: 600;
+  transition: all 0.2s;
+  width: auto;
+  min-width: auto;
+}
+
+.documents-section .refresh-button:hover:not(:disabled) {
+  background-color: #e5e5e5;
+  border-color: #000000;
+}
+
+.documents-section .refresh-button:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.documents-section .refresh-button svg {
+  width: 16px;
+  height: 16px;
+}
+
+/* Search Section - Sidebar Style */
+.documents-section .search-section {
+  margin-bottom: 1.5rem;
+  flex-shrink: 0;
+}
+
+.documents-section .search-input-wrapper {
+  position: relative;
+  display: flex;
+  align-items: center;
+  width: 100%;
+}
+
+.documents-section .search-icon {
+  position: absolute;
+  left: 0.75rem;
+  width: 18px;
+  height: 18px;
+  color: #666666;
+  pointer-events: none;
+  z-index: 1;
+}
+
+.documents-section .search-input {
+  width: 100%;
+  padding: 0.6rem 0.75rem 0.6rem 2.5rem;
+  border: 1px solid #e5e5e5;
+  border-radius: 6px;
+  font-size: 0.85rem;
+  background-color: #ffffff;
+  color: #000000;
+  transition: all 0.2s;
+}
+
+.documents-section .search-input:focus {
+  outline: none;
+  border-color: #000000;
+  box-shadow: 0 0 0 2px rgba(0, 0, 0, 0.1);
+}
+
+.documents-section .search-input::placeholder {
+  color: #999999;
+}
+
+.documents-section .clear-search-button {
+  position: absolute;
+  right: 0.5rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border: none;
+  background: none;
+  cursor: pointer;
+  color: #666666;
+  border-radius: 4px;
+  transition: all 0.2s;
+  z-index: 1;
+}
+
+.documents-section .clear-search-button:hover {
+  background-color: #f5f5f5;
+  color: #000000;
+}
+
+.documents-section .clear-search-button svg {
+  width: 16px;
+  height: 16px;
+}
+
+/* Document Count - Sidebar Style */
+.documents-section .document-count {
+  margin-bottom: 1rem;
+  color: #666666;
+  font-size: 0.85rem;
+  font-weight: 500;
+  flex-shrink: 0;
+}
+
+/* Documents List Container - Scrollable Box */
+.documents-section .documents-list-container {
+  border: 1px solid #e5e5e5;
+  border-radius: 8px;
+  background-color: #ffffff;
+  min-height: 200px;
+  max-height: 500px;
+  overflow-y: auto;
+  overflow-x: hidden;
+  position: relative;
+}
+
+.documents-section .documents-list-container::-webkit-scrollbar {
+  width: 8px;
+}
+
+.documents-section .documents-list-container::-webkit-scrollbar-track {
+  background: #f5f5f5;
+  border-radius: 4px;
+}
+
+.documents-section .documents-list-container::-webkit-scrollbar-thumb {
+  background: #cccccc;
+  border-radius: 4px;
+}
+
+.documents-section .documents-list-container::-webkit-scrollbar-thumb:hover {
+  background: #999999;
+}
+
+/* Documents List - Simple List View */
+.documents-section .documents-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+}
+
+/* Document List Item */
+.documents-section .document-list-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.75rem 1rem;
+  border-bottom: 1px solid #f0f0f0;
+  transition: background-color 0.2s;
+  gap: 0.75rem;
+}
+
+.documents-section .document-list-item:last-child {
+  border-bottom: none;
+}
+
+.documents-section .document-list-item:hover {
+  background-color: #fafafa;
+}
+
+.documents-section .document-list-item-content {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  flex: 1;
+  min-width: 0;
+}
+
+.documents-section .document-list-item-icon {
+  font-size: 1.25rem;
+  flex-shrink: 0;
+  opacity: 0.7;
+}
+
+.documents-section .document-list-item-info {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.documents-section .document-list-item-title {
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: #000000;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  line-height: 1.3;
+}
+
+.documents-section .document-list-item-meta {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.75rem;
+  color: #666666;
+  flex-wrap: wrap;
+}
+
+.documents-section .document-list-item-source {
+  font-weight: 500;
+}
+
+.documents-section .document-list-item-separator {
+  color: #cccccc;
+}
+
+.documents-section .document-list-item-size,
+.documents-section .document-list-item-date {
+  color: #666666;
+}
+
+.documents-section .document-list-item-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-shrink: 0;
+}
+
+.documents-section .document-list-action-button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  border: 1px solid #e5e5e5;
+  border-radius: 6px;
+  background-color: #ffffff;
+  cursor: pointer;
+  transition: all 0.2s;
+  color: #666666;
+}
+
+.documents-section .document-list-action-button:hover:not(:disabled) {
+  background-color: #f5f5f5;
+  border-color: #000000;
+  color: #000000;
+}
+
+.documents-section
+  .document-list-action-button.delete-button:hover:not(:disabled) {
+  background-color: #fee;
+  border-color: #dc3545;
+  color: #dc3545;
+}
+
+.documents-section .document-list-action-button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.documents-section .document-list-action-button svg {
+  width: 16px;
+  height: 16px;
+}
+
+.documents-section .document-list-action-button .button-spinner {
+  width: 14px;
+  height: 14px;
+  border: 2px solid rgba(0, 0, 0, 0.2);
+  border-top: 2px solid #000000;
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+
+/* Adjust document grid for sidebar */
+.documents-section .documents-grid {
+  grid-template-columns: 1fr;
+  gap: 1rem;
+}
+
+/* Make document cards more compact in sidebar */
+.documents-section .document-card {
+  padding: 1rem;
+  border: 1px solid #e5e5e5;
+  border-radius: 8px;
+  background-color: #ffffff;
+  transition: all 0.2s;
+}
+
+.documents-section .document-card:hover {
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+  border-color: #000000;
+}
+
+.documents-section .document-card-header {
+  display: flex;
+  gap: 0.75rem;
+  align-items: flex-start;
+  margin-bottom: 0.75rem;
+}
+
+.documents-section .document-icon {
+  font-size: 1.5rem;
+  flex-shrink: 0;
+  opacity: 0.7;
+}
+
+.documents-section .document-title-group {
+  flex: 1;
+  min-width: 0;
+}
+
+.documents-section .document-title {
+  margin: 0 0 0.4rem 0;
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: #000000;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  word-break: break-word;
+  line-height: 1.3;
+}
+
+.documents-section .document-meta {
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.documents-section .document-type,
+.documents-section .document-source {
+  padding: 0.2rem 0.5rem;
+  border-radius: 4px;
+  font-size: 0.7rem;
+  font-weight: 600;
+  text-transform: uppercase;
+}
+
+.documents-section .document-type {
+  background-color: #e3f2fd;
+  color: #1976d2;
+}
+
+.documents-section .document-source {
+  background-color: #f3e5f5;
+  color: #7b1fa2;
+}
+
+.documents-section .document-details {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  padding-top: 0.75rem;
+  border-top: 1px solid #f0f0f0;
+  margin-bottom: 0.75rem;
+}
+
+.documents-section .detail-row {
+  display: flex;
+  justify-content: space-between;
+  font-size: 0.8rem;
+  gap: 0.5rem;
+}
+
+.documents-section .detail-label {
+  color: #666666;
+  font-weight: 500;
+  flex-shrink: 0;
+}
+
+.documents-section .detail-value {
+  color: #000000;
+  text-align: right;
+  word-break: break-word;
+}
+
+.documents-section .document-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  padding-top: 0.75rem;
+  border-top: 1px solid #f0f0f0;
+}
+
+.documents-section .action-button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  padding: 0.6rem;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 0.85rem;
+  font-weight: 600;
+  transition: all 0.2s;
+  width: 100%;
+}
+
+.documents-section .download-button {
+  background-color: #f5f5f5;
+  color: #000000;
+  border: 1px solid #e5e5e5;
+}
+
+.documents-section .download-button:hover:not(:disabled) {
+  background-color: #e5e5e5;
+  border-color: #000000;
+}
+
+.documents-section .delete-button {
+  background-color: #f5f5f5;
+  color: #000000;
+  border: 1px solid #e5e5e5;
+}
+
+.documents-section .delete-button:hover:not(:disabled) {
+  background-color: #fee;
+  border-color: #dc3545;
+  color: #dc3545;
+}
+
+.documents-section .action-button:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.documents-section .action-button svg {
+  width: 16px;
+  height: 16px;
+}
+
+/* Error and Loading States - Sidebar Style */
+.documents-section .error-message {
+  padding: 0.75rem;
+  background-color: #fee;
+  color: #721c24;
+  border: 1px solid #dc3545;
+  border-radius: 6px;
+  margin-bottom: 1rem;
+  font-size: 0.85rem;
+}
+
+.documents-section .retry-button {
+  padding: 0.4rem 0.75rem;
+  background-color: #dc3545;
+  color: white;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 0.8rem;
+  margin-top: 0.5rem;
+}
+
+.documents-section .loading-container {
+  padding: 2rem 1rem;
+}
+
+.documents-section .empty-state {
+  padding: 2rem 1rem;
+  text-align: center;
+}
+
+.documents-section .empty-icon {
+  width: 40px;
+  height: 40px;
+  color: #cccccc;
+  margin-bottom: 0.75rem;
+}
+
+.documents-section .empty-state p {
+  font-size: 0.9rem;
+}
+
+.documents-section .empty-hint {
+  font-size: 0.8rem !important;
+}
+
+/* Adjust processor config for sidebar */
+.documents-section .processor-config {
+  padding: 2rem 1.5rem;
+  margin-bottom: 1.5rem;
+}
+
+/* Hide file input in documents section */
+.documents-section .file-input {
+  display: none !important;
+  visibility: hidden !important;
+  position: absolute !important;
+  width: 0 !important;
+  height: 0 !important;
+  opacity: 0 !important;
+}
+
+/* Upload zone styles for sidebar */
+.documents-section .upload-zone-wrapper {
+  width: 100%;
+  margin-bottom: 1.5rem;
+}
+
+.documents-section .upload-zone {
+  border: 2px dashed #cccccc;
+  border-radius: 8px;
+  padding: 2rem 1.5rem;
+  text-align: center;
+  background-color: #ffffff;
+  transition: all 0.3s ease;
+  cursor: pointer;
+  position: relative;
+  width: 100%;
+}
+
+.documents-section .upload-zone:hover {
+  border-color: #000000;
+  background-color: #fafafa;
+}
+
+.documents-section .upload-zone.dragging {
+  border-color: #000000;
+  background-color: #f5f5f5;
+  border-style: solid;
+  transform: scale(1.01);
+}
+
+.documents-section .upload-zone.uploading {
+  pointer-events: none;
+  opacity: 0.6;
+}
+
+.documents-section .upload-content {
+  pointer-events: none;
+}
+
+.documents-section .upload-content > * {
+  pointer-events: none;
+}
+
+.documents-section .upload-content .choose-files-button {
+  pointer-events: auto;
+}
+
+.documents-section .upload-icon {
+  width: 3rem;
+  height: 3rem;
+  color: #000000;
+  margin-bottom: 1rem;
+  opacity: 0.6;
+  display: block;
+  margin-left: auto;
+  margin-right: auto;
+}
+
+.documents-section .upload-text {
+  font-size: 1rem;
+  color: #000000;
+  margin-bottom: 1rem;
+  font-weight: 500;
+}
+
+.documents-section .choose-files-button {
+  pointer-events: auto;
+  background-color: #000000;
+  color: #ffffff;
+  border: 2px solid #000000;
+  padding: 0.75rem 1.5rem;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 0.9rem;
+  font-weight: 600;
+  transition: all 0.2s;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  margin-bottom: 0.5rem;
+}
+
+.documents-section .choose-files-button:hover:not(:disabled) {
+  background-color: #333333;
+  border-color: #333333;
+  transform: translateY(-1px);
+}
+
+.documents-section .choose-files-button:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.documents-section .upload-hint {
+  color: #666666;
+  font-size: 0.85rem;
+  margin-top: 0.5rem;
+}
+
+.documents-section .processor-options {
+  display: grid !important;
+  grid-template-columns: repeat(2, 1fr) !important;
+  gap: 1rem;
+  flex-direction: unset !important;
+  flex-wrap: unset !important;
+  flex: unset !important;
+  justify-content: unset !important;
+  align-items: unset !important;
+}
+
+.documents-section .processor-option {
+  padding: 1rem 0.5rem;
+  min-height: 90px;
+  justify-content: center;
+  flex: unset !important;
+  max-width: unset !important;
+  overflow: hidden !important;
+  box-sizing: border-box !important;
+  gap: 0.4rem !important;
+  flex-direction: row !important;
+}
+
+.documents-section .processor-checkbox-wrapper {
+  flex-direction: row !important;
+  gap: 0.4rem !important;
+  width: 100% !important;
+  justify-content: flex-start !important;
+}
+
+.documents-section .processor-label {
+  white-space: normal !important;
+  word-wrap: break-word !important;
+  overflow-wrap: break-word !important;
+  text-align: left !important;
+  line-height: 1.2 !important;
+  font-size: 0.8rem !important;
+  max-width: calc(100% - 1.5rem) !important;
+  display: inline-block !important;
+  hyphens: auto !important;
+  flex: 1 !important;
+  min-width: 0 !important;
+}
+
+/* Adjust chat components for split layout */
+.chat-section .chat-header {
+  margin-bottom: 1.5rem;
+}
+
+.chat-section .processor-config-wrapper {
+  margin-bottom: 1.5rem;
+}
+
+.chat-section .chat-messages {
+  flex: 1;
+  overflow-y: auto;
+  min-height: 0;
+}
+
+.chat-section .chat-input-form {
+  margin-top: 1rem;
+}
+
+/* Responsive Design */
+@media (max-width: 1024px) {
+  .documents-chat-page {
+    padding: 0;
+    padding-top: 80px;
+  }
+
+  .documents-chat-container {
+    flex-direction: column;
+    height: auto;
+    min-height: calc(100vh - 80px);
+  }
+
+  .documents-section {
+    width: 100%;
+    flex: 0 0 auto;
+    height: auto;
+    max-height: 40vh;
+    border-right: none;
+    border-bottom: 1px solid #e5e5e5;
+  }
+
+  .documents-section .documents-list-container {
+    max-height: 30vh;
+  }
+
+  .chat-section {
+    width: 100%;
+    flex: 1 1 auto;
+    height: auto;
+    min-height: 60vh;
+  }
+
+  .documents-section-content {
+    padding: 1rem 1.5rem 1.5rem 1.5rem;
+    padding-top: calc(1rem + 80px);
+  }
+
+  .documents-section-title {
+    font-size: 1.25rem;
+  }
+
+  .chat-section .chat-container {
+    padding: 1.5rem;
+    padding-top: calc(1.5rem + 80px);
+  }
+
+  /* Keep 2x2 grid even in responsive mode for documents section */
+  .documents-section .processor-options {
+    display: grid !important;
+    grid-template-columns: repeat(2, 1fr) !important;
+  }
+}
+
+@media (max-width: 768px) {
+  .documents-chat-page {
+    padding: 0;
+    padding-top: 80px;
+  }
+
+  .documents-chat-container {
+    min-height: calc(100vh - 80px);
+  }
+
+  .documents-section {
+    max-height: 50vh;
+  }
+
+  .documents-section .documents-list-container {
+    max-height: 35vh;
+  }
+
+  .documents-section .document-list-item {
+    padding: 0.6rem 0.75rem;
+  }
+
+  .documents-section .document-list-item-title {
+    font-size: 0.85rem;
+  }
+
+  .documents-section .document-list-item-meta {
+    font-size: 0.7rem;
+  }
+
+  .documents-section-content {
+    padding: 0.75rem 1rem 1rem 1rem;
+    padding-top: calc(0.75rem + 80px);
+  }
+
+  .documents-section-title {
+    font-size: 1.1rem;
+  }
+
+  .chat-section .chat-container {
+    padding: 1rem;
+    padding-top: calc(1rem + 80px);
+  }
+
+  /* Keep 2x2 grid on mobile too */
+  .documents-section .processor-options {
+    display: grid !important;
+    grid-template-columns: repeat(2, 1fr) !important;
+  }
+}

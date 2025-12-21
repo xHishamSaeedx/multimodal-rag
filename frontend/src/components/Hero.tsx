@@ -1,14 +1,27 @@
 import React from "react";
+import Beams from "./Beams";
 import "./Hero.css";
 
 const Hero: React.FC = () => {
   const scrollToChat = () => {
-    // Navigate to chat page instead of scrolling to non-existent upload section
-    window.location.href = "/chat";
+    // Navigate to RAG page instead of scrolling to non-existent upload section
+    window.location.href = "/rag";
   };
 
   return (
     <section id="hero" className="hero">
+      <div className="hero-background">
+        <Beams
+          beamWidth={3}
+          beamHeight={60}
+          beamNumber={12}
+          lightColor="#ffffff"
+          speed={2}
+          noiseIntensity={1.75}
+          scale={0.2}
+          rotation={45}
+        />
+      </div>
       <div className="hero-container">
         <div className="hero-content">
           <h1 className="hero-title">
@@ -16,13 +29,6 @@ const Hero: React.FC = () => {
             <br />
             <span className="hero-title-accent">RAG System</span>
           </h1>
-          <p className="hero-description">
-            Comprehensive multimodal RAG implementation demonstrating advanced
-            retrieval architectures, state-of-the-art embedding models, and
-            complete MLOps observability stack. Showcases modern ML engineering
-            practices with FastAPI, container orchestration, and monitoring for
-            educational and research applications.
-          </p>
           <div className="hero-actions">
             <button className="hero-button primary" onClick={scrollToChat}>
               Try Demo
