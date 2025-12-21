@@ -7,6 +7,7 @@ Raw Document → Extraction → Chunking → Storage → Indexing
 
 import logging
 import time
+from contextlib import contextmanager
 from pathlib import Path
 from typing import Optional, Dict, Any, List
 from uuid import UUID
@@ -41,6 +42,25 @@ from app.utils.exceptions import (
 )
 
 logger = logging.getLogger(__name__)
+
+
+@contextmanager
+def log_timing(operation_name: str, logger=logger):
+    """
+    Context manager to log operation timing.
+    
+    Usage:
+        with log_timing("Database Insert"):
+            # operation code
+            pass
+    """
+    start_time = time.time()
+    logger.info(f"⏱️  [{operation_name}] Starting...")
+    try:
+        yield
+    finally:
+        duration = time.time() - start_time
+        logger.info(f"⏱️  [{operation_name}] Completed in {duration:.3f}s")
 
 
 class IngestionPipelineError(Exception):
@@ -95,9 +115,11 @@ class IngestionPipeline:
         
         self.extractor = TextExtractor()  # Keep for backward compatibility
         self.extraction_runner = ExtractionRunner(
+            max_workers=3,  # Allow text, table, and image extraction in parallel
             extract_ocr=True,  # Enable OCR to extract text from chart images
             enable_text=enable_text,
             enable_tables=enable_tables,
+            use_process_pool=False,  # Use ThreadPoolExecutor for better compatibility (ProcessPool may fail on Windows)
             enable_image_extraction=enable_images,
         )
         self.table_processor = TableProcessor()
@@ -185,21 +207,24 @@ class IngestionPipeline:
             - extracted_content: ExtractedContent object
             - stats: Chunking statistics
         
-        Raises:
+            Raises:
             IngestionPipelineError: If pipeline execution fails
         """
+        pipeline_start_time = time.time()
+        logger.info(f"🚀 Starting document ingestion pipeline for: {filename}")
         try:
             # Step 1: Store raw document in MinIO
             logger.info(f"Step 1: Storing raw document in MinIO: {filename}")
             file_type = self.extractor._infer_file_type(Path(filename))
             
-            object_key = self.storage.upload_raw_document(
-                file_bytes=file_bytes,
-                filename=filename,
-                source=source,
-                document_type=file_type,
-                add_timestamp=True,
-            )
+            with log_timing("MinIO Upload"):
+                object_key = self.storage.upload_raw_document(
+                    file_bytes=file_bytes,
+                    filename=filename,
+                    source=source,
+                    document_type=file_type,
+                    add_timestamp=True,
+                )
             logger.info(f"✓ Stored raw document: {object_key}")
             
             # Step 2: Extract text, tables, and images in parallel
@@ -233,13 +258,14 @@ class IngestionPipeline:
             if self.enable_text and extracted_content and extracted_content.text:
                 logger.info(f"Step 3: Chunking extracted text")
                 
-                chunks = self.chunker.chunk_document(
-                    text=extracted_content.text,
-                    document_metadata=chunk_metadata,
-                    preserve_structure=True,
-                )
+                with log_timing("Text Chunking"):
+                    chunks = self.chunker.chunk_document(
+                        text=extracted_content.text,
+                        document_metadata=chunk_metadata,
+                        preserve_structure=True,
+                    )
+                    stats = self.chunker.get_chunk_statistics(chunks)
                 
-                stats = self.chunker.get_chunk_statistics(chunks)
                 logger.info(
                     f"✓ Created {len(chunks)} chunks "
                     f"(avg: {stats['average_tokens']} tokens/chunk)"
@@ -251,27 +277,29 @@ class IngestionPipeline:
             # Step 4: Store document and chunks in Supabase
             logger.info(f"Step 4: Storing document and chunks in database")
             
-            document_id = self.repository.create_document(
-                source_path=object_key,
-                filename=filename,
-                document_type=file_type,
-                extracted_text=extracted_content.text if extracted_content else "",
-                metadata={
-                    "source": source,
-                    "file_size": extracted_content.file_size if extracted_content else len(file_bytes),
-                    "page_count": extracted_content.page_count if extracted_content else 0,
-                    "extracted_at": extracted_content.extracted_at.isoformat() if extracted_content else datetime.utcnow().isoformat(),
-                    "chunking_stats": stats,
-                    **(extracted_content.metadata if extracted_content else {}),
-                    **(document_metadata or {}),
-                },
-            )
+            with log_timing("Supabase - Create Document"):
+                document_id = self.repository.create_document(
+                    source_path=object_key,
+                    filename=filename,
+                    document_type=file_type,
+                    extracted_text=extracted_content.text if extracted_content else "",
+                    metadata={
+                        "source": source,
+                        "file_size": extracted_content.file_size if extracted_content else len(file_bytes),
+                        "page_count": extracted_content.page_count if extracted_content else 0,
+                        "extracted_at": extracted_content.extracted_at.isoformat() if extracted_content else datetime.utcnow().isoformat(),
+                        "chunking_stats": stats,
+                        **(extracted_content.metadata if extracted_content else {}),
+                        **(document_metadata or {}),
+                    },
+                )
             logger.info(f"✓ Created document record: {document_id}")
             
-            chunk_ids = self.repository.create_chunks(
-                document_id=document_id,
-                chunks=chunks,
-            )
+            with log_timing(f"Supabase - Create {len(chunks)} Text Chunks"):
+                chunk_ids = self.repository.create_chunks(
+                    document_id=document_id,
+                    chunks=chunks,
+                )
             logger.info(f"✓ Created {len(chunk_ids)} chunk records")
             
             # Step 4.5: Process and store tables (only if table processing is enabled)
@@ -281,9 +309,10 @@ class IngestionPipeline:
                 logger.info(f"Step 4.5: Processing and storing {len(extracted_tables)} table(s)")
                 
                 # Process tables (convert to JSON, markdown, flattened text)
-                processed_tables = [
-                    self.table_processor.process_table(table) for table in extracted_tables
-                ]
+                with log_timing(f"Process {len(extracted_tables)} Tables"):
+                    processed_tables = [
+                        self.table_processor.process_table(table) for table in extracted_tables
+                    ]
                 logger.info(f"✓ Processed {len(processed_tables)} table(s)")
                 
                 # Create table chunks (one chunk per table)
@@ -309,10 +338,11 @@ class IngestionPipeline:
                     table_chunks.append(table_chunk)
                 
                 # Store table chunks in database
-                table_chunk_ids = self.repository.create_chunks(
-                    document_id=document_id,
-                    chunks=table_chunks,
-                )
+                with log_timing(f"Supabase - Create {len(table_chunks)} Table Chunks"):
+                    table_chunk_ids = self.repository.create_chunks(
+                        document_id=document_id,
+                        chunks=table_chunks,
+                    )
                 logger.info(f"✓ Created {len(table_chunk_ids)} table chunk records")
                 
                 # Update chunks with table_data and embedding_type
@@ -331,10 +361,11 @@ class IngestionPipeline:
                         "metadata": processed_table.metadata,
                     })
                 
-                table_ids = self.repository.create_tables_batch(
-                    document_id=document_id,
-                    tables_data=tables_data,
-                )
+                with log_timing(f"Supabase - Store {len(tables_data)} Table Metadata"):
+                    table_ids = self.repository.create_tables_batch(
+                        document_id=document_id,
+                        tables_data=tables_data,
+                    )
                 logger.info(f"✓ Stored {len(table_ids)} table(s) in tables table")
             
             # Step 5: Generate embeddings for text chunks (only if text processing is enabled)
@@ -346,12 +377,13 @@ class IngestionPipeline:
                 chunk_texts = [chunk.text for chunk in chunks]
                 
                 # Generate embeddings in batch with metrics
-                embedding_start = time.time()
-                text_embeddings = self.embedder.embed_batch(
-                    texts=chunk_texts,
-                    show_progress=True,
-                )
-                embedding_duration = time.time() - embedding_start
+                with log_timing(f"Text Embeddings Generation ({len(chunks)} chunks)"):
+                    embedding_start = time.time()
+                    text_embeddings = self.embedder.embed_batch(
+                        texts=chunk_texts,
+                        show_progress=True,
+                    )
+                    embedding_duration = time.time() - embedding_start
                 
                 # Record text embedding metrics
                 text_embedding_duration_seconds.observe(embedding_duration)
@@ -374,12 +406,13 @@ class IngestionPipeline:
                 table_texts = [processed_table.table_text for processed_table in processed_tables]
                 
                 # Generate embeddings in batch (same model as text) with metrics
-                embedding_start = time.time()
-                table_embeddings = self.embedder.embed_batch(
-                    texts=table_texts,
-                    show_progress=True,
-                )
-                embedding_duration = time.time() - embedding_start
+                with log_timing(f"Table Embeddings Generation ({len(processed_tables)} tables)"):
+                    embedding_start = time.time()
+                    table_embeddings = self.embedder.embed_batch(
+                        texts=table_texts,
+                        show_progress=True,
+                    )
+                    embedding_duration = time.time() - embedding_start
                 
                 # Record text embedding metrics (tables use same text embedding model)
                 text_embedding_duration_seconds.observe(embedding_duration)
@@ -414,11 +447,12 @@ class IngestionPipeline:
                     text_payloads.append(payload)
                 
                 # Store text vectors in Qdrant
-                self.vector_repo.store_vectors(
-                    chunk_ids=chunk_ids,
-                    embeddings=text_embeddings,
-                    payloads=text_payloads,
-                )
+                with log_timing(f"Qdrant - Store {len(text_embeddings)} Text Vectors"):
+                    self.vector_repo.store_vectors(
+                        chunk_ids=chunk_ids,
+                        embeddings=text_embeddings,
+                        payloads=text_payloads,
+                    )
                 logger.info(f"✓ Stored {len(text_embeddings)} text embeddings in Qdrant")
             else:
                 logger.info(f"Step 6: Skipping text embedding storage (text processing disabled or no embeddings)")
@@ -448,11 +482,12 @@ class IngestionPipeline:
                     table_payloads.append(payload)
                 
                 # Store table vectors in Qdrant table_chunks collection
-                self.vector_repo.store_table_vectors(
-                    chunk_ids=table_chunk_ids,
-                    embeddings=table_embeddings,
-                    payloads=table_payloads,
-                )
+                with log_timing(f"Qdrant - Store {len(table_embeddings)} Table Vectors"):
+                    self.vector_repo.store_table_vectors(
+                        chunk_ids=table_chunk_ids,
+                        embeddings=table_embeddings,
+                        payloads=table_payloads,
+                    )
                 logger.info(f"✓ Stored {len(table_embeddings)} table embeddings in Qdrant (table_chunks)")
             
             # Step 6.6: Process and store images (only if image processing is enabled)
@@ -473,10 +508,11 @@ class IngestionPipeline:
                         if self.vision_processor:
                             try:
                                 logger.debug(f"Generating caption for image {extracted_image.image_index}")
-                                vision_result = self.vision_processor.process_image(
-                                    image_bytes=extracted_image.image_bytes
-                                )
-                                caption = vision_result.description
+                                with log_timing(f"Vision - Caption Image {extracted_image.image_index}"):
+                                    vision_result = self.vision_processor.process_image(
+                                        image_bytes=extracted_image.image_bytes
+                                    )
+                                    caption = vision_result.description
                                 # Combine OCR text (if any) with caption
                                 if extracted_image.extracted_text:
                                     extracted_image.extracted_text = f"{extracted_image.extracted_text}\n\nCaption: {caption}"
@@ -489,33 +525,35 @@ class IngestionPipeline:
                         
                         # Upload image to Supabase storage
                         try:
-                            storage_path = self.image_storage.upload_image(
-                                image_bytes=extracted_image.image_bytes,
-                                document_id=document_id,
-                                image_index=extracted_image.image_index,
-                                image_ext=extracted_image.image_ext,
-                                add_timestamp=True,
-                            )
+                            with log_timing(f"Supabase Storage - Upload Image {extracted_image.image_index}"):
+                                storage_path = self.image_storage.upload_image(
+                                    image_bytes=extracted_image.image_bytes,
+                                    document_id=document_id,
+                                    image_index=extracted_image.image_index,
+                                    image_ext=extracted_image.image_ext,
+                                    add_timestamp=True,
+                                )
                         except Exception as e:
                             logger.warning(f"Failed to upload image {extracted_image.image_index} to Supabase: {e}")
                             continue
                         
                         # Store image record in database
-                        image_id = self.repository.create_image(
-                            document_id=document_id,
-                            image_path=storage_path,
-                            image_type=extracted_image.image_type,
-                            extracted_text=extracted_image.extracted_text,
-                            caption=caption,  # Store caption separately
-                            metadata={
-                                "width": extracted_image.width,
-                                "height": extracted_image.height,
-                                "format": extracted_image.image_ext,
-                                "page": extracted_image.page,
-                                "position": extracted_image.position,
-                                **extracted_image.metadata,
-                            },
-                        )
+                        with log_timing(f"Supabase - Create Image {extracted_image.image_index} Record"):
+                            image_id = self.repository.create_image(
+                                document_id=document_id,
+                                image_path=storage_path,
+                                image_type=extracted_image.image_type,
+                                extracted_text=extracted_image.extracted_text,
+                                caption=caption,  # Store caption separately
+                                metadata={
+                                    "width": extracted_image.width,
+                                    "height": extracted_image.height,
+                                    "format": extracted_image.image_ext,
+                                    "page": extracted_image.page,
+                                    "position": extracted_image.position,
+                                    **extracted_image.metadata,
+                                },
+                            )
                         # Generate descriptive text for the image chunk
                         # This helps the LLM understand what the image contains
                         image_chunk_text = self._generate_image_chunk_text(
@@ -579,12 +617,13 @@ class IngestionPipeline:
                     image_bytes_list = [img.image_bytes for img in processed_extracted_images]
                     
                     # Generate embeddings in batch with metrics
-                    embedding_start = time.time()
-                    image_embeddings = self.image_embedder.embed_batch(
-                        image_bytes_list=image_bytes_list,
-                        show_progress=True,
-                    )
-                    embedding_duration = time.time() - embedding_start
+                    with log_timing(f"Image Embeddings Generation ({len(image_ids)} images)"):
+                        embedding_start = time.time()
+                        image_embeddings = self.image_embedder.embed_batch(
+                            image_bytes_list=image_bytes_list,
+                            show_progress=True,
+                        )
+                        embedding_duration = time.time() - embedding_start
                     
                     # Record image embedding metrics
                     image_embedding_duration_seconds.observe(embedding_duration)
@@ -630,11 +669,12 @@ class IngestionPipeline:
                         image_payloads.append(payload)
                     
                     # Store image vectors in Qdrant image_chunks collection
-                    self.image_vector_repo.store_vectors(
-                        chunk_ids=image_chunk_ids,
-                        embeddings=image_embeddings,
-                        payloads=image_payloads,
-                    )
+                    with log_timing(f"Qdrant - Store {len(image_embeddings)} Image Vectors"):
+                        self.image_vector_repo.store_vectors(
+                            chunk_ids=image_chunk_ids,
+                            embeddings=image_embeddings,
+                            payloads=image_payloads,
+                        )
                     logger.info(f"✓ Stored {len(image_embeddings)} image embeddings in Qdrant (image_chunks)")
             
             # Step 7: Index text chunks in Elasticsearch (BM25) (only if text processing is enabled)
@@ -649,20 +689,21 @@ class IngestionPipeline:
                 created_at_list = [chunk.created_at for chunk in chunks]
                 
                 # Index text chunks in Elasticsearch
-                text_chunk_types = ["text"] * len(chunks)
-                text_embedding_types = ["text"] * len(chunks)
-                self.sparse_repo.index_chunks(
-                    chunk_ids=chunk_ids,
-                    chunk_texts=chunk_texts,
-                    document_ids=[document_id] * len(chunks),
-                    filenames=filenames,
-                    document_types=document_types,
-                    source_paths=source_paths,
-                    metadata_list=[chunk.metadata for chunk in chunks],
-                    created_at_list=created_at_list,
-                    chunk_types=text_chunk_types,
-                    embedding_types=text_embedding_types,
-                )
+                with log_timing(f"Elasticsearch - Index {len(chunks)} Text Chunks"):
+                    text_chunk_types = ["text"] * len(chunks)
+                    text_embedding_types = ["text"] * len(chunks)
+                    self.sparse_repo.index_chunks(
+                        chunk_ids=chunk_ids,
+                        chunk_texts=chunk_texts,
+                        document_ids=[document_id] * len(chunks),
+                        filenames=filenames,
+                        document_types=document_types,
+                        source_paths=source_paths,
+                        metadata_list=[chunk.metadata for chunk in chunks],
+                        created_at_list=created_at_list,
+                        chunk_types=text_chunk_types,
+                        embedding_types=text_embedding_types,
+                    )
                 logger.info(f"✓ Indexed {len(chunks)} text chunks in Elasticsearch (BM25)")
             else:
                 logger.info(f"Step 7: Skipping text indexing (text processing disabled or no chunks)")
@@ -695,38 +736,40 @@ class IngestionPipeline:
                     table_metadata_list.append(table_metadata)
                 
                 # Index table chunks in Elasticsearch
-                self.sparse_repo.index_chunks(
-                    chunk_ids=table_chunk_ids,
-                    chunk_texts=table_chunk_texts,
-                    document_ids=[document_id] * len(processed_tables),
-                    filenames=table_filenames,
-                    document_types=table_document_types,
-                    source_paths=table_source_paths,
-                    metadata_list=table_metadata_list,
-                    created_at_list=table_created_at_list,
-                    chunk_types=table_chunk_types,
-                    embedding_types=table_embedding_types,
-                    table_markdown_list=table_markdown_list,
-                )
+                with log_timing(f"Elasticsearch - Index {len(processed_tables)} Table Chunks"):
+                    self.sparse_repo.index_chunks(
+                        chunk_ids=table_chunk_ids,
+                        chunk_texts=table_chunk_texts,
+                        document_ids=[document_id] * len(processed_tables),
+                        filenames=table_filenames,
+                        document_types=table_document_types,
+                        source_paths=table_source_paths,
+                        metadata_list=table_metadata_list,
+                        created_at_list=table_created_at_list,
+                        chunk_types=table_chunk_types,
+                        embedding_types=table_embedding_types,
+                        table_markdown_list=table_markdown_list,
+                    )
                 logger.info(f"✓ Indexed {len(processed_tables)} table chunks in Elasticsearch (BM25)")
             
             # Step 8: Build knowledge graph (if Neo4j is enabled and graph building is requested)
             if self.graph_repo and settings.neo4j_enabled and self.enable_graph:
                 try:
                     logger.info(f"Step 8: Building knowledge graph for document {document_id}")
-                    self._build_document_graph(
-                        document_id=str(document_id),
-                        title=filename,
-                        source=object_key,
-                        document_type=file_type,
-                        chunks=chunks,
-                        chunk_ids=chunk_ids,
-                        table_chunks=processed_tables,
-                        table_chunk_ids=table_chunk_ids,
-                        image_chunk_ids=image_chunk_ids,
-                        image_chunks=image_chunks_for_graph,
-                        metadata=document_metadata,
-                    )
+                    with log_timing("Neo4j - Build Knowledge Graph"):
+                        self._build_document_graph(
+                            document_id=str(document_id),
+                            title=filename,
+                            source=object_key,
+                            document_type=file_type,
+                            chunks=chunks,
+                            chunk_ids=chunk_ids,
+                            table_chunks=processed_tables,
+                            table_chunk_ids=table_chunk_ids,
+                            image_chunk_ids=image_chunk_ids,
+                            image_chunks=image_chunks_for_graph,
+                            metadata=document_metadata,
+                        )
                     logger.info("✓ Knowledge graph built successfully")
                 except Exception as e:
                     logger.error(
@@ -739,12 +782,14 @@ class IngestionPipeline:
                 logger.info("Step 8: Skipping knowledge graph (Neo4j disabled, not available, or graph building disabled)")
             
             total_chunks = len(chunks) + len(processed_tables) + len(image_ids)
+            pipeline_duration = time.time() - pipeline_start_time
             logger.info(
-                f"Pipeline complete: Document {document_id} ingested with "
+                f"✅ Pipeline complete in {pipeline_duration:.2f}s: Document {document_id} ingested with "
                 f"{len(chunks)} text chunks, {len(processed_tables)} table chunks, "
                 f"{len(image_ids)} image chunks, "
                 f"embeddings stored in Qdrant, and BM25 index in Elasticsearch"
             )
+            logger.info(f"⏱️  [TOTAL PIPELINE] Completed in {pipeline_duration:.3f}s")
             
             return {
                 "document_id": str(document_id),

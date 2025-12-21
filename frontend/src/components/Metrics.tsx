@@ -34,6 +34,13 @@ interface RetrieverMetrics {
   model?: string;
 }
 
+interface KnowledgeGraphMetrics {
+  queryType: string;
+  avgDuration: number;
+  maxDuration: number;
+  queriesExecuted: number;
+}
+
 const Metrics: React.FC = () => {
   const [activeTab, setActiveTab] = useState("overview");
   const [currentModels, setCurrentModels] = useState<ModelsConfig | null>(null);
@@ -261,6 +268,42 @@ const Metrics: React.FC = () => {
       dimensions: 768,
     },
   ];
+
+  // Knowledge Graph Performance Data
+  const knowledgeGraphMetrics: KnowledgeGraphMetrics[] = [
+    {
+      queryType: "graph_traversal",
+      avgDuration: 107,
+      maxDuration: 186,
+      queriesExecuted: 5,
+    },
+    {
+      queryType: "by_topics",
+      avgDuration: 119,
+      maxDuration: 214,
+      queriesExecuted: 5,
+    },
+    {
+      queryType: "by_section_title",
+      avgDuration: 223,
+      maxDuration: 422,
+      queriesExecuted: 5,
+    },
+    {
+      queryType: "by_keywords",
+      avgDuration: 670,
+      maxDuration: 1210,
+      queriesExecuted: 5,
+    },
+  ];
+
+  const knowledgeGraphOverview = {
+    unifiedAverage: 243,
+    maxRetrievalTime: 507,
+    totalQueries: 20,
+    totalChunksRetrieved: 94,
+    avgChunksPerQuery: 18.7,
+  };
 
   const renderOverview = () => {
     if (loading) {
@@ -712,6 +755,727 @@ const Metrics: React.FC = () => {
     );
   };
 
+  const renderDocumentIngestion = () => {
+    // Document ingestion performance metrics from the performance report
+    const ingestionOverview = {
+      totalTime: 25.605,
+      fileSize: "318 KB",
+      pages: 12,
+      images: 5,
+      tables: 5,
+      textChunks: 10,
+      totalChunks: 20,
+      entities: 123,
+      relationships: 3526,
+    };
+
+    const performanceBreakdown = [
+      { category: "Storage Operations", time: 7.372, percentage: 28.8 },
+      { category: "Table/Image Extraction", time: 6.64, percentage: 25.9 },
+      { category: "Neo4j Graph Building", time: 5.583, percentage: 21.8 },
+      { category: "Vision Processing", time: 2.857, percentage: 11.2 },
+      { category: "Embedding Generation", time: 1.362, percentage: 5.3 },
+      { category: "Elasticsearch Indexing", time: 0.292, percentage: 1.1 },
+      { category: "Qdrant Vector Storage", time: 0.188, percentage: 0.7 },
+      { category: "Text Processing", time: 0.004, percentage: 0.02 },
+    ];
+
+    const breakdownChartData = {
+      labels: performanceBreakdown.map((item) => item.category),
+      datasets: [
+        {
+          label: "Time (seconds)",
+          data: performanceBreakdown.map((item) => item.time),
+          backgroundColor: [
+            "rgba(220, 53, 69, 0.8)",
+            "rgba(255, 193, 7, 0.8)",
+            "rgba(255, 152, 0, 0.8)",
+            "rgba(156, 39, 176, 0.8)",
+            "rgba(63, 81, 181, 0.8)",
+            "rgba(76, 175, 80, 0.8)",
+            "rgba(0, 188, 212, 0.8)",
+            "rgba(96, 125, 139, 0.8)",
+          ],
+          borderColor: [
+            "#dc3545",
+            "#ffc107",
+            "#ff9800",
+            "#9c27b0",
+            "#3f51b5",
+            "#4caf50",
+            "#00bcd4",
+            "#607d8b",
+          ],
+          borderWidth: 1,
+        },
+      ],
+    };
+
+    const chartOptions = {
+      responsive: true,
+      plugins: {
+        legend: {
+          position: "top" as const,
+        },
+      },
+      scales: {
+        y: {
+          beginAtZero: true,
+        },
+      },
+    };
+
+    return (
+      <div className="metrics-document-ingestion">
+        <div className="metrics-header">
+          <h2>Document Ingestion Performance</h2>
+          <p>
+            Performance analysis of the multimodal document ingestion pipeline
+            on a sample PDF document
+          </p>
+        </div>
+
+        {/* Sample Document Info */}
+        <div className="sample-document-banner">
+          <div className="sample-info">
+            <h3>📄 Sample Document: tech_sector_report.pdf</h3>
+            <p>
+              {ingestionOverview.fileSize} • {ingestionOverview.pages} pages •{" "}
+              {ingestionOverview.images} images • {ingestionOverview.tables}{" "}
+              tables
+            </p>
+          </div>
+          <a
+            href="http://localhost:8000/api/v1/health/sample-pdf"
+            download="tech_sector_report.pdf"
+            className="download-button"
+          >
+            <svg
+              width="20"
+              height="20"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+            >
+              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+              <polyline points="7 10 12 15 17 10"></polyline>
+              <line x1="12" y1="15" x2="12" y2="3"></line>
+            </svg>
+            Download Sample PDF
+          </a>
+        </div>
+
+        {/* Overview Cards */}
+        <div className="ingestion-overview-cards">
+          <div className="ingestion-stat-card">
+            <div className="stat-icon">⏱️</div>
+            <div className="stat-details">
+              <h4>Total Ingestion Time</h4>
+              <p className="stat-number">{ingestionOverview.totalTime}s</p>
+              <span className="stat-description">End-to-end pipeline</span>
+            </div>
+          </div>
+
+          <div className="ingestion-stat-card">
+            <div className="stat-icon">📦</div>
+            <div className="stat-details">
+              <h4>Total Chunks Created</h4>
+              <p className="stat-number">{ingestionOverview.totalChunks}</p>
+              <span className="stat-description">
+                {ingestionOverview.textChunks} text + {ingestionOverview.tables}{" "}
+                table + {ingestionOverview.images} image
+              </span>
+            </div>
+          </div>
+
+          <div className="ingestion-stat-card">
+            <div className="stat-icon">🔗</div>
+            <div className="stat-details">
+              <h4>Knowledge Graph</h4>
+              <p className="stat-number">{ingestionOverview.entities}</p>
+              <span className="stat-description">
+                {ingestionOverview.relationships.toLocaleString()} relationships
+              </span>
+            </div>
+          </div>
+
+          <div className="ingestion-stat-card">
+            <div className="stat-icon">✅</div>
+            <div className="stat-details">
+              <h4>Parallel Extraction</h4>
+              <p className="stat-number">5.95s</p>
+              <span className="stat-description">Time saved (23.2%)</span>
+            </div>
+          </div>
+        </div>
+
+        {/* Performance Breakdown Chart */}
+        <div className="comparison-charts">
+          <div className="chart-container">
+            <h3 className="chart-title">Performance Breakdown by Category</h3>
+            <Bar data={breakdownChartData} options={chartOptions} />
+          </div>
+        </div>
+
+        {/* Detailed Breakdown Table */}
+        <div className="comparison-table">
+          <h3>Detailed Performance Breakdown</h3>
+          <table>
+            <thead>
+              <tr>
+                <th>Category</th>
+                <th>Time (seconds)</th>
+                <th>% of Total</th>
+              </tr>
+            </thead>
+            <tbody>
+              {performanceBreakdown.map((item, index) => (
+                <tr key={index}>
+                  <td className="model-name">{item.category}</td>
+                  <td className="time-cell">{item.time}s</td>
+                  <td className="relevance-cell">{item.percentage}%</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+
+        {/* Granular Per-Item Metrics */}
+        <div className="granular-metrics-section">
+          <h3 className="section-title">Granular Per-Item Performance</h3>
+
+          <div className="granular-metrics-grid">
+            {/* Table Extraction Metrics */}
+            <div className="granular-metric-card">
+              <h4>📊 Table Extraction</h4>
+              <div className="metric-detail">
+                <span className="detail-label">Total Tables:</span>
+                <span className="detail-value">5 tables</span>
+              </div>
+              <div className="metric-detail">
+                <span className="detail-label">Total Time:</span>
+                <span className="detail-value">6.640s</span>
+              </div>
+              <div className="metric-detail highlight">
+                <span className="detail-label">Avg per Table:</span>
+                <span className="detail-value">1.328s</span>
+              </div>
+              <div className="metric-detail">
+                <span className="detail-label">Method:</span>
+                <span className="detail-value">camelot-lattice</span>
+              </div>
+            </div>
+
+            {/* Image Extraction Metrics */}
+            <div className="granular-metric-card">
+              <h4>🖼️ Image Extraction</h4>
+              <div className="metric-detail">
+                <span className="detail-label">Total Images:</span>
+                <span className="detail-value">5 images</span>
+              </div>
+              <div className="metric-detail">
+                <span className="detail-label">Total Time:</span>
+                <span className="detail-value">5.950s</span>
+              </div>
+              <div className="metric-detail highlight">
+                <span className="detail-label">Avg per Image:</span>
+                <span className="detail-value">1.190s</span>
+              </div>
+              <div className="metric-detail">
+                <span className="detail-label">Library:</span>
+                <span className="detail-value">PyMuPDF (fitz)</span>
+              </div>
+            </div>
+
+            {/* Vision Captioning Metrics */}
+            <div className="granular-metric-card">
+              <h4>🎯 Vision Captioning</h4>
+              <div className="metric-detail">
+                <span className="detail-label">Total Images:</span>
+                <span className="detail-value">5 images</span>
+              </div>
+              <div className="metric-detail">
+                <span className="detail-label">Total Time:</span>
+                <span className="detail-value">2.857s</span>
+              </div>
+              <div className="metric-detail highlight">
+                <span className="detail-label">Avg per Image:</span>
+                <span className="detail-value">571ms</span>
+              </div>
+              <div className="metric-detail">
+                <span className="detail-label">Model:</span>
+                <span className="detail-value">BLIP-base</span>
+              </div>
+            </div>
+
+            {/* Text Embeddings Metrics */}
+            <div className="granular-metric-card">
+              <h4>📝 Text Embeddings</h4>
+              <div className="metric-detail">
+                <span className="detail-label">Total Chunks:</span>
+                <span className="detail-value">10 chunks</span>
+              </div>
+              <div className="metric-detail">
+                <span className="detail-label">Total Time:</span>
+                <span className="detail-value">0.806s</span>
+              </div>
+              <div className="metric-detail highlight">
+                <span className="detail-label">Avg per Chunk:</span>
+                <span className="detail-value">80.6ms</span>
+              </div>
+              <div className="metric-detail">
+                <span className="detail-label">Model:</span>
+                <span className="detail-value">GTE-Large (1024d)</span>
+              </div>
+            </div>
+
+            {/* Table Embeddings Metrics */}
+            <div className="granular-metric-card">
+              <h4>📋 Table Embeddings</h4>
+              <div className="metric-detail">
+                <span className="detail-label">Total Tables:</span>
+                <span className="detail-value">5 tables</span>
+              </div>
+              <div className="metric-detail">
+                <span className="detail-label">Total Time:</span>
+                <span className="detail-value">0.141s</span>
+              </div>
+              <div className="metric-detail highlight">
+                <span className="detail-label">Avg per Table:</span>
+                <span className="detail-value">28.2ms</span>
+              </div>
+              <div className="metric-detail">
+                <span className="detail-label">Model:</span>
+                <span className="detail-value">GTE-Large (1024d)</span>
+              </div>
+            </div>
+
+            {/* Image Embeddings Metrics */}
+            <div className="granular-metric-card">
+              <h4>🖼️ Image Embeddings</h4>
+              <div className="metric-detail">
+                <span className="detail-label">Total Images:</span>
+                <span className="detail-value">5 images</span>
+              </div>
+              <div className="metric-detail">
+                <span className="detail-label">Total Time:</span>
+                <span className="detail-value">0.415s</span>
+              </div>
+              <div className="metric-detail highlight">
+                <span className="detail-label">Avg per Image:</span>
+                <span className="detail-value">83ms</span>
+              </div>
+              <div className="metric-detail">
+                <span className="detail-label">Model:</span>
+                <span className="detail-value">CLIP (768d)</span>
+              </div>
+            </div>
+
+            {/* Image Upload Metrics */}
+            <div className="granular-metric-card">
+              <h4>☁️ Image Uploads</h4>
+              <div className="metric-detail">
+                <span className="detail-label">Total Images:</span>
+                <span className="detail-value">5 images</span>
+              </div>
+              <div className="metric-detail">
+                <span className="detail-label">Total Time:</span>
+                <span className="detail-value">3.441s</span>
+              </div>
+              <div className="metric-detail highlight">
+                <span className="detail-label">Avg per Image:</span>
+                <span className="detail-value">688ms</span>
+              </div>
+              <div className="metric-detail">
+                <span className="detail-label">Storage:</span>
+                <span className="detail-value">Supabase</span>
+              </div>
+            </div>
+
+            {/* Database Operations Metrics */}
+            <div className="granular-metric-card">
+              <h4>💾 Database Inserts</h4>
+              <div className="metric-detail">
+                <span className="detail-label">Total Chunks:</span>
+                <span className="detail-value">20 chunks</span>
+              </div>
+              <div className="metric-detail">
+                <span className="detail-label">Total Time:</span>
+                <span className="detail-value">3.865s</span>
+              </div>
+              <div className="metric-detail highlight">
+                <span className="detail-label">Avg per Chunk:</span>
+                <span className="detail-value">193ms</span>
+              </div>
+              <div className="metric-detail">
+                <span className="detail-label">Database:</span>
+                <span className="detail-value">Supabase</span>
+              </div>
+            </div>
+
+            {/* Vector Storage Metrics */}
+            <div className="granular-metric-card">
+              <h4>🔍 Vector Storage</h4>
+              <div className="metric-detail">
+                <span className="detail-label">Total Vectors:</span>
+                <span className="detail-value">20 vectors</span>
+              </div>
+              <div className="metric-detail">
+                <span className="detail-label">Total Time:</span>
+                <span className="detail-value">0.188s</span>
+              </div>
+              <div className="metric-detail highlight">
+                <span className="detail-label">Avg per Vector:</span>
+                <span className="detail-value">9.4ms</span>
+              </div>
+              <div className="metric-detail">
+                <span className="detail-label">Database:</span>
+                <span className="detail-value">Qdrant</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Key Insights */}
+        <div className="model-insights">
+          <h3>Performance Insights</h3>
+          <div className="insights-list">
+            <div className="insight-item">
+              <span className="insight-icon">
+                <svg
+                  width="20"
+                  height="20"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                >
+                  <polyline points="22 12 18 12 15 21 9 3 6 12 2 12"></polyline>
+                </svg>
+              </span>
+              <div className="insight-content">
+                <h4>🚀 Excellent Performance</h4>
+                <p>
+                  Parallel extraction working effectively - saved 5.95 seconds
+                  (23.2%). Fast vector storage with Qdrant (0.188s) and
+                  efficient text processing (0.004s).
+                </p>
+              </div>
+            </div>
+
+            <div className="insight-item">
+              <span className="insight-icon">
+                <svg
+                  width="20"
+                  height="20"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                >
+                  <circle cx="12" cy="12" r="10"></circle>
+                  <path d="M12 6v6l4 2"></path>
+                </svg>
+              </span>
+              <div className="insight-content">
+                <h4>🔴 Primary Bottlenecks</h4>
+                <p>
+                  Storage operations (28.8%), table/image extraction (25.9%),
+                  and Neo4j graph building (21.8%) account for 76.5% of total
+                  time. Focus optimization efforts here.
+                </p>
+              </div>
+            </div>
+
+            <div className="insight-item">
+              <span className="insight-icon">
+                <svg
+                  width="20"
+                  height="20"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                >
+                  <path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"></path>
+                </svg>
+              </span>
+              <div className="insight-content">
+                <h4>🎯 Optimization Potential</h4>
+                <p>
+                  Conservative optimizations could reduce time to 22.6s (11.7%
+                  faster). Aggressive optimizations with optional graph building
+                  could reach 13.0s (49.2% faster).
+                </p>
+              </div>
+            </div>
+
+            <div className="insight-item">
+              <span className="insight-icon">
+                <svg
+                  width="20"
+                  height="20"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                >
+                  <path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"></path>
+                </svg>
+              </span>
+              <div className="insight-content">
+                <h4>💡 Key Recommendations</h4>
+                <p>
+                  Optimize Supabase image uploads (parallel uploads,
+                  compression), make Neo4j graph building optional, and profile
+                  table extraction for library-level optimizations.
+                </p>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  };
+
+  const renderKnowledgeGraph = () => {
+    const queryTypeTimeData = {
+      labels: knowledgeGraphMetrics.map((m) =>
+        m.queryType.replace(/_/g, " ").replace(/\b\w/g, (l) => l.toUpperCase())
+      ),
+      datasets: [
+        {
+          label: "Average Duration (ms)",
+          data: knowledgeGraphMetrics.map((m) => m.avgDuration),
+          backgroundColor: "rgba(75, 192, 192, 0.8)",
+          borderColor: "#4bc0c0",
+          borderWidth: 1,
+        },
+        {
+          label: "Max Duration (ms)",
+          data: knowledgeGraphMetrics.map((m) => m.maxDuration),
+          backgroundColor: "rgba(255, 99, 132, 0.8)",
+          borderColor: "#ff6384",
+          borderWidth: 1,
+        },
+      ],
+    };
+
+    const chartOptions = {
+      responsive: true,
+      plugins: {
+        legend: {
+          position: "top" as const,
+        },
+      },
+      scales: {
+        y: {
+          beginAtZero: true,
+        },
+      },
+    };
+
+    return (
+      <div className="metrics-knowledge-graph">
+        <div className="metrics-header">
+          <h2>Knowledge Graph Performance</h2>
+          <p>
+            Performance analysis of Neo4j graph-based retrieval across 4 query
+            types
+          </p>
+        </div>
+
+        {/* Overview Cards */}
+        <div className="graph-overview-cards">
+          <div className="graph-stat-card">
+            <div className="stat-icon">📊</div>
+            <div className="stat-details">
+              <h4>Unified Average</h4>
+              <p className="stat-number">
+                {knowledgeGraphOverview.unifiedAverage}ms
+              </p>
+              <span className="stat-description">Average retrieval time</span>
+            </div>
+          </div>
+
+          <div className="graph-stat-card">
+            <div className="stat-icon">⚡</div>
+            <div className="stat-details">
+              <h4>Max Retrieval</h4>
+              <p className="stat-number">
+                {knowledgeGraphOverview.maxRetrievalTime}ms
+              </p>
+              <span className="stat-description">Peak latency observed</span>
+            </div>
+          </div>
+
+          <div className="graph-stat-card">
+            <div className="stat-icon">🔍</div>
+            <div className="stat-details">
+              <h4>Total Queries</h4>
+              <p className="stat-number">
+                {knowledgeGraphOverview.totalQueries}
+              </p>
+              <span className="stat-description">Across all query types</span>
+            </div>
+          </div>
+
+          <div className="graph-stat-card">
+            <div className="stat-icon">📦</div>
+            <div className="stat-details">
+              <h4>Chunks Retrieved</h4>
+              <p className="stat-number">
+                {knowledgeGraphOverview.avgChunksPerQuery}
+              </p>
+              <span className="stat-description">Average per query</span>
+            </div>
+          </div>
+        </div>
+
+        {/* Performance Charts */}
+        <div className="comparison-charts">
+          <div className="chart-container">
+            <h3 className="chart-title">Query Type Performance Comparison</h3>
+            <Bar data={queryTypeTimeData} options={chartOptions} />
+          </div>
+        </div>
+
+        {/* Detailed Table */}
+        <div className="comparison-table">
+          <h3>Query Type Performance Details</h3>
+          <table>
+            <thead>
+              <tr>
+                <th>Query Type</th>
+                <th>Average Duration</th>
+                <th>Max Duration</th>
+                <th>Queries Executed</th>
+              </tr>
+            </thead>
+            <tbody>
+              {knowledgeGraphMetrics.map((metric, index) => (
+                <tr key={index}>
+                  <td className="model-name">
+                    {metric.queryType
+                      .replace(/_/g, " ")
+                      .replace(/\b\w/g, (l) => l.toUpperCase())}
+                  </td>
+                  <td className="time-cell">{metric.avgDuration}ms</td>
+                  <td className="time-cell">
+                    {metric.maxDuration > 1000
+                      ? `${(metric.maxDuration / 1000).toFixed(2)}s`
+                      : `${metric.maxDuration}ms`}
+                  </td>
+                  <td>{metric.queriesExecuted}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+
+        {/* Key Insights */}
+        <div className="model-insights">
+          <h3>Knowledge Graph Insights</h3>
+          <div className="insights-list">
+            <div className="insight-item">
+              <span className="insight-icon">
+                <svg
+                  width="20"
+                  height="20"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                >
+                  <circle cx="12" cy="12" r="10"></circle>
+                  <path d="M8 14s1.5 2 4 2 4-2 4-2"></path>
+                  <line x1="9" y1="9" x2="9.01" y2="9"></line>
+                  <line x1="15" y1="9" x2="15.01" y2="9"></line>
+                </svg>
+              </span>
+              <div className="insight-content">
+                <h4>Fastest Query Type</h4>
+                <p>
+                  Graph traversal queries achieve the best performance at 107ms
+                  average, making them ideal for relationship-based searches
+                </p>
+              </div>
+            </div>
+
+            <div className="insight-item">
+              <span className="insight-icon">
+                <svg
+                  width="20"
+                  height="20"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                >
+                  <polyline points="22 12 18 12 15 21 9 3 6 12 2 12"></polyline>
+                </svg>
+              </span>
+              <div className="insight-content">
+                <h4>Performance Spread</h4>
+                <p>
+                  6.3x performance difference between fastest (graph_traversal:
+                  107ms) and slowest (by_keywords: 670ms) query types
+                </p>
+              </div>
+            </div>
+
+            <div className="insight-item">
+              <span className="insight-icon">
+                <svg
+                  width="20"
+                  height="20"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                >
+                  <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"></path>
+                  <polyline points="3.27 6.96 12 12.01 20.73 6.96"></polyline>
+                  <line x1="12" y1="22.08" x2="12" y2="12"></line>
+                </svg>
+              </span>
+              <div className="insight-content">
+                <h4>High Retrieval Volume</h4>
+                <p>
+                  Knowledge graph retrieves 18.7 chunks per query on average,
+                  87% more than hybrid retrieval (10.0 chunks)
+                </p>
+              </div>
+            </div>
+
+            <div className="insight-item">
+              <span className="insight-icon">
+                <svg
+                  width="20"
+                  height="20"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                >
+                  <path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"></path>
+                </svg>
+              </span>
+              <div className="insight-content">
+                <h4>Optimization Opportunity</h4>
+                <p>
+                  By_keywords queries (670ms avg) show potential for
+                  optimization through query rewriting or caching strategies
+                </p>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  };
+
   return (
     <section id="metrics" className="metrics">
       <div className="metrics-container">
@@ -728,10 +1492,28 @@ const Metrics: React.FC = () => {
           >
             Model Comparison
           </button>
+          <button
+            className={`nav-tab ${
+              activeTab === "knowledge-graph" ? "active" : ""
+            }`}
+            onClick={() => setActiveTab("knowledge-graph")}
+          >
+            Knowledge Graph
+          </button>
+          <button
+            className={`nav-tab ${
+              activeTab === "document-ingestion" ? "active" : ""
+            }`}
+            onClick={() => setActiveTab("document-ingestion")}
+          >
+            Document Ingestion
+          </button>
         </div>
 
         {activeTab === "overview" && renderOverview()}
         {activeTab === "comparison" && renderComparison()}
+        {activeTab === "knowledge-graph" && renderKnowledgeGraph()}
+        {activeTab === "document-ingestion" && renderDocumentIngestion()}
       </div>
     </section>
   );

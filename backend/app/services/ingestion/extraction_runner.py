@@ -1,14 +1,15 @@
 """
 Parallel extraction runner.
 
-Runs text and table extraction in parallel for better performance.
-Supports both synchronous (ThreadPoolExecutor) and asynchronous (asyncio) execution.
+Runs text, table, and image extraction in parallel for better performance.
+Supports both synchronous (ProcessPoolExecutor/ThreadPoolExecutor) and asynchronous (asyncio) execution.
+Uses ProcessPoolExecutor for CPU-bound extraction tasks to avoid GIL contention.
 """
 
 import asyncio
 import logging
 import time
-from concurrent.futures import ThreadPoolExecutor, as_completed
+from concurrent.futures import ThreadPoolExecutor, ProcessPoolExecutor, as_completed
 from typing import Tuple
 from pathlib import Path
 from datetime import datetime
@@ -48,17 +49,19 @@ class ExtractionRunner:
         enable_text: bool = True,
         enable_tables: bool = True,
         enable_image_extraction: bool = True,
+        use_process_pool: bool = True,  # Use ProcessPoolExecutor for CPU-bound tasks
     ):
         """
         Initialize the extraction runner.
         
         Args:
-            max_workers: Maximum number of worker threads for parallel extraction
+            max_workers: Maximum number of worker threads/processes for parallel extraction
             extract_images: Whether to extract images (default: True)
             extract_ocr: Whether to extract OCR text from images (default: False)
             enable_text: Whether to extract text (default: True)
             enable_tables: Whether to extract tables (default: True)
             enable_image_extraction: Whether to extract images (default: True)
+            use_process_pool: Whether to use ProcessPoolExecutor for CPU-bound tasks (default: True)
         """
         self.text_extractor = TextExtractor() if enable_text else None
         self.table_extractor = TableExtractor() if enable_tables else None
@@ -69,6 +72,7 @@ class ExtractionRunner:
         self.enable_text = enable_text
         self.enable_tables = enable_tables
         self.enable_image_extraction = enable_image_extraction
+        self.use_process_pool = use_process_pool
     
     def extract_parallel_from_bytes(
         self,
@@ -79,7 +83,8 @@ class ExtractionRunner:
         """
         Extract text, tables, and images from file bytes in parallel (synchronous).
         
-        Uses ThreadPoolExecutor to run all extractions concurrently.
+        Uses ProcessPoolExecutor (for CPU-bound tasks) or ThreadPoolExecutor to run all extractions concurrently.
+        ProcessPoolExecutor avoids GIL contention for CPU-intensive extraction operations.
         
         Args:
             file_bytes: File content as bytes
@@ -93,108 +98,126 @@ class ExtractionRunner:
             ExtractionError: If text extraction fails (table/image extraction failures are non-fatal)
         """
         try:
-            logger.info(f"Starting parallel extraction (sync): {file_name}")
+            logger.info(f"Starting parallel extraction ({'ProcessPool' if self.use_process_pool else 'ThreadPool'}): {file_name}")
             
             # Infer file type for metrics
             if file_type is None:
                 file_type = self.text_extractor._infer_file_type(Path(file_name)) if self.text_extractor else "unknown"
             
-            # Create a copy of file_bytes for each extraction (some libraries may consume it)
-            # In practice, most libraries work with BytesIO which doesn't consume the bytes
-            with ThreadPoolExecutor(max_workers=self.max_workers) as executor:
-                # Submit all extraction tasks with timing wrappers
-                futures = {}
-                future_start_times = {}
-                
-                text_future = None
-                if self.enable_text and self.text_extractor:
-                    text_future = executor.submit(
-                        self.text_extractor.extract_from_bytes,
-                        file_bytes=file_bytes,
-                        file_name=file_name,
-                        file_type=file_type,
-                    )
-                    futures[text_future] = "text"
-                    future_start_times[text_future] = time.time()
-                
-                table_future = None
-                if self.enable_tables and self.table_extractor:
-                    table_future = executor.submit(
-                        self.table_extractor.extract_from_bytes,
-                        file_bytes=file_bytes,
-                        file_name=file_name,
-                        file_type=file_type,
-                    )
-                    futures[table_future] = "table"
-                    future_start_times[table_future] = time.time()
-                
-                image_future = None
-                if self.extract_images and self.image_extractor:
-                    image_future = executor.submit(
-                        self.image_extractor.extract_from_bytes,
-                        file_bytes=file_bytes,
-                        file_name=file_name,
-                        file_type=file_type,
-                    )
-                    futures[image_future] = "image"
-                    future_start_times[image_future] = time.time()
-                
-                # Wait for all to complete and collect results
-                extracted_content = None
-                extracted_tables = []
-                extracted_images = []
-                
-                for future in as_completed(futures.keys()):
-                    try:
-                        result = future.result()
-                        extraction_type = futures[future]
-                        extraction_duration = time.time() - future_start_times[future]
-                        
-                        # Determine which extraction this is based on result type
-                        if extraction_type == "text":
-                            extracted_content = result
-                            # Record text extraction metrics
-                            text_extraction_duration_seconds.labels(file_type=file_type).observe(extraction_duration)
-                            logger.info(f"✓ Text extraction completed in {extraction_duration:.2f}s")
-                        elif extraction_type == "table":
-                            extracted_tables = result
-                            # Record table extraction metrics (per document, not per table)
-                            table_extraction_duration_seconds.labels(file_type=file_type).observe(extraction_duration)
-                            tables_extracted_total.labels(file_type=file_type).inc(len(extracted_tables))
-                            logger.info(f"✓ Table extraction completed in {extraction_duration:.2f}s ({len(extracted_tables)} tables)")
-                        elif extraction_type == "image":
-                            extracted_images = result
-                            # Record image extraction metrics (per document, not per image)
-                            image_extraction_duration_seconds.labels(file_type=file_type).observe(extraction_duration)
-                            images_extracted_total.labels(file_type=file_type).inc(len(extracted_images))
-                            logger.info(f"✓ Image extraction completed in {extraction_duration:.2f}s ({len(extracted_images)} images)")
+            # Choose executor based on configuration
+            # ProcessPoolExecutor is better for CPU-bound tasks (table/image extraction)
+            # but requires picklable objects
+            ExecutorClass = ProcessPoolExecutor if self.use_process_pool else ThreadPoolExecutor
+            
+            try:
+                with ExecutorClass(max_workers=self.max_workers) as executor:
+                    # Submit all extraction tasks with timing wrappers
+                    futures = {}
+                    future_start_times = {}
                     
-                    except Exception as e:
-                        # Determine which extraction failed
-                        extraction_type = futures[future]
-                        if extraction_type == "text":
-                            logger.error(
-                                f"Text extraction failed: {e}",
-                                exc_info=e,
-                            )
-                            raise ExtractionError(
-                                f"Text extraction failed: {str(e)}",
-                                {"file_name": file_name, "error": str(e)},
-                            ) from e
-                        elif extraction_type == "table":
-                            # Table extraction failure is non-fatal
-                            logger.warning(
-                                f"Table extraction failed (continuing with text only): {e}",
-                                exc_info=e,
-                            )
-                            extracted_tables = []
-                        elif extraction_type == "image":
-                            # Image extraction failure is non-fatal
-                            logger.warning(
-                                f"Image extraction failed (continuing without images): {e}",
-                                exc_info=e,
-                            )
-                            extracted_images = []
+                    text_future = None
+                    if self.enable_text and self.text_extractor:
+                        text_future = executor.submit(
+                            self.text_extractor.extract_from_bytes,
+                            file_bytes=file_bytes,
+                            file_name=file_name,
+                            file_type=file_type,
+                        )
+                        futures[text_future] = "text"
+                        future_start_times[text_future] = time.time()
+                    
+                    table_future = None
+                    if self.enable_tables and self.table_extractor:
+                        table_future = executor.submit(
+                            self.table_extractor.extract_from_bytes,
+                            file_bytes=file_bytes,
+                            file_name=file_name,
+                            file_type=file_type,
+                        )
+                        futures[table_future] = "table"
+                        future_start_times[table_future] = time.time()
+                    
+                    image_future = None
+                    if self.extract_images and self.image_extractor:
+                        image_future = executor.submit(
+                            self.image_extractor.extract_from_bytes,
+                            file_bytes=file_bytes,
+                            file_name=file_name,
+                            file_type=file_type,
+                        )
+                        futures[image_future] = "image"
+                        future_start_times[image_future] = time.time()
+                    
+                    # Wait for all to complete and collect results
+                    extracted_content = None
+                    extracted_tables = []
+                    extracted_images = []
+                    
+                    for future in as_completed(futures.keys()):
+                        try:
+                            result = future.result()
+                            extraction_type = futures[future]
+                            extraction_duration = time.time() - future_start_times[future]
+                            
+                            # Determine which extraction this is based on result type
+                            if extraction_type == "text":
+                                extracted_content = result
+                                # Record text extraction metrics
+                                text_extraction_duration_seconds.labels(file_type=file_type).observe(extraction_duration)
+                                logger.info(f"✓ Text extraction completed in {extraction_duration:.2f}s")
+                            elif extraction_type == "table":
+                                extracted_tables = result
+                                # Record table extraction metrics (per document, not per table)
+                                table_extraction_duration_seconds.labels(file_type=file_type).observe(extraction_duration)
+                                tables_extracted_total.labels(file_type=file_type).inc(len(extracted_tables))
+                                logger.info(f"✓ Table extraction completed in {extraction_duration:.2f}s ({len(extracted_tables)} tables)")
+                            elif extraction_type == "image":
+                                extracted_images = result
+                                # Record image extraction metrics (per document, not per image)
+                                image_extraction_duration_seconds.labels(file_type=file_type).observe(extraction_duration)
+                                images_extracted_total.labels(file_type=file_type).inc(len(extracted_images))
+                                logger.info(f"✓ Image extraction completed in {extraction_duration:.2f}s ({len(extracted_images)} images)")
+                        
+                        except Exception as e:
+                            # Determine which extraction failed
+                            extraction_type = futures[future]
+                            if extraction_type == "text":
+                                logger.error(
+                                    f"Text extraction failed: {e}",
+                                    exc_info=e,
+                                )
+                                raise ExtractionError(
+                                    f"Text extraction failed: {str(e)}",
+                                    {"file_name": file_name, "error": str(e)},
+                                ) from e
+                            elif extraction_type == "table":
+                                # Table extraction failure is non-fatal
+                                logger.warning(
+                                    f"Table extraction failed (continuing with text only): {e}",
+                                    exc_info=e,
+                                )
+                                extracted_tables = []
+                            elif extraction_type == "image":
+                                # Image extraction failure is non-fatal
+                                logger.warning(
+                                    f"Image extraction failed (continuing without images): {e}",
+                                    exc_info=e,
+                                )
+                                extracted_images = []
+            
+            except (RuntimeError, OSError) as pool_error:
+                # ProcessPoolExecutor might fail with pickling issues or on Windows
+                # Fall back to ThreadPoolExecutor
+                if self.use_process_pool:
+                    logger.warning(
+                        f"ProcessPoolExecutor failed ({pool_error}), falling back to ThreadPoolExecutor. "
+                        "This may result in slower extraction due to GIL contention."
+                    )
+                    # Retry with ThreadPoolExecutor
+                    self.use_process_pool = False
+                    return self.extract_parallel_from_bytes(file_bytes, file_name, file_type)
+                else:
+                    raise
             
             # Text extraction is required if enabled
             if self.enable_text and extracted_content is None:
@@ -228,13 +251,6 @@ class ExtractionRunner:
                     )
             else:
                 logger.info(f"No tables found in {file_name}")
-            
-            # Process tables
-            processed_tables = []
-            if extracted_tables and self.enable_tables and self.table_processor:
-                processed_tables = [
-                    self.table_processor.process_table(table) for table in extracted_tables
-                ]
             
             # Log image extraction results
             if extracted_images:
@@ -358,13 +374,6 @@ class ExtractionRunner:
             else:
                 logger.info(f"No tables found in {file_path.name}")
             
-            # Process tables
-            processed_tables = []
-            if extracted_tables and self.enable_tables and self.table_processor:
-                processed_tables = [
-                    self.table_processor.process_table(table) for table in extracted_tables
-                ]
-            
             # Note: extract_parallel_from_file doesn't extract images (file-based extraction)
             # Return empty list for images to maintain consistent return signature
             extracted_images = []
@@ -465,13 +474,6 @@ class ExtractionRunner:
                     )
             else:
                 logger.info(f"No tables found in {file_name}")
-            
-            # Process tables
-            processed_tables = []
-            if extracted_tables and self.enable_tables and self.table_processor:
-                processed_tables = [
-                    self.table_processor.process_table(table) for table in extracted_tables
-                ]
             
             # Note: async method doesn't extract images yet
             # Return empty list for images to maintain consistent return signature

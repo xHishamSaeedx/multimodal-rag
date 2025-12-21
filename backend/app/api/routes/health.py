@@ -118,3 +118,28 @@ async def metrics() -> Response:
         content=generate_latest(),
         media_type=CONTENT_TYPE_LATEST
     )
+
+
+@router.get("/sample-pdf")
+async def get_sample_pdf():
+    """
+    Download the sample PDF used for ingestion performance testing.
+    
+    Returns the tech_sector_report.pdf file for users to see what sample was used.
+    """
+    from fastapi.responses import FileResponse
+    import os
+    
+    # Get the path to the PDF file
+    pdf_path = os.path.join(os.path.dirname(__file__), "..", "..", "..", "..", "scripts", "tech_sector_report.pdf")
+    pdf_path = os.path.abspath(pdf_path)
+    
+    if not os.path.exists(pdf_path):
+        from fastapi import HTTPException
+        raise HTTPException(status_code=404, detail="Sample PDF not found")
+    
+    return FileResponse(
+        path=pdf_path,
+        filename="tech_sector_report.pdf",
+        media_type="application/pdf"
+    )

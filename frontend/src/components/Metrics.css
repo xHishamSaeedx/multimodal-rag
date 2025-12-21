@@ -350,6 +350,241 @@
   margin: 0;
 }
 
+/* Knowledge Graph Tab */
+.metrics-knowledge-graph {
+  /* Direct content styling */
+}
+
+/* Document Ingestion Tab */
+.metrics-document-ingestion {
+  /* Direct content styling */
+}
+
+.sample-document-banner {
+  background-color: #000000;
+  color: white;
+  padding: 2rem;
+  border-radius: 0;
+  margin-bottom: 3rem;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 1.5rem;
+  border: 1px solid #000000;
+}
+
+.sample-info h3 {
+  font-size: 1.5rem;
+  font-weight: 700;
+  margin: 0 0 0.5rem 0;
+}
+
+.sample-info p {
+  margin: 0;
+  opacity: 0.9;
+  font-size: 1rem;
+}
+
+.download-button {
+  background-color: transparent;
+  color: white;
+  border: 2px solid white;
+  padding: 0.75rem 1.5rem;
+  font-size: 1rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  text-decoration: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  border-radius: 0;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+.download-button:hover {
+  background-color: white;
+  color: #000000;
+  transform: translateY(-2px);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.1);
+}
+
+.download-button svg {
+  stroke-width: 2;
+}
+
+.ingestion-overview-cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+  gap: 2rem;
+  margin-bottom: 4rem;
+}
+
+.ingestion-stat-card {
+  background-color: #fafafa;
+  border: 1px solid #e5e5e5;
+  padding: 2rem;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  gap: 1.5rem;
+  transition: all 0.3s ease;
+}
+
+.ingestion-stat-card:hover {
+  transform: translateY(-4px);
+  border-color: #000000;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.1);
+}
+
+/* Granular Metrics Section */
+.granular-metrics-section {
+  margin-top: 4rem;
+  padding-top: 3rem;
+  border-top: 1px solid #e5e5e5;
+}
+
+.section-title {
+  font-size: 1.5rem;
+  font-weight: 700;
+  margin: 0 0 2rem 0;
+  color: #000000;
+  text-align: center;
+}
+
+.granular-metrics-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 2rem;
+  margin-bottom: 3rem;
+}
+
+.granular-metric-card {
+  background-color: #fafafa;
+  border: 1px solid #e5e5e5;
+  padding: 2rem;
+  border-radius: 8px;
+  transition: all 0.3s ease;
+}
+
+.granular-metric-card:hover {
+  transform: translateY(-4px);
+  border-color: #000000;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.1);
+}
+
+.granular-metric-card h4 {
+  font-size: 1.1rem;
+  font-weight: 700;
+  margin: 0 0 1.5rem 0;
+  color: #000000;
+  padding-bottom: 1rem;
+  border-bottom: 2px solid #000000;
+}
+
+.metric-detail {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 0.75rem;
+  padding: 0.5rem 0;
+}
+
+.metric-detail.highlight {
+  background-color: #000000;
+  color: #ffffff;
+  margin: 0.75rem -1rem;
+  padding: 0.75rem 1rem;
+  font-weight: 700;
+}
+
+.detail-label {
+  font-size: 0.9rem;
+  color: #666666;
+  font-weight: 500;
+}
+
+.metric-detail.highlight .detail-label {
+  color: #ffffff;
+  opacity: 0.9;
+}
+
+.detail-value {
+  font-size: 0.95rem;
+  font-weight: 700;
+  color: #000000;
+}
+
+.metric-detail.highlight .detail-value {
+  color: #ffffff;
+  font-size: 1.1rem;
+}
+
+.graph-overview-cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+  gap: 2rem;
+  margin-bottom: 4rem;
+}
+
+.graph-stat-card {
+  background-color: #fafafa;
+  border: 1px solid #e5e5e5;
+  padding: 2rem;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  gap: 1.5rem;
+  transition: all 0.3s ease;
+}
+
+.graph-stat-card:hover {
+  transform: translateY(-4px);
+  border-color: #000000;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.1);
+}
+
+.stat-icon {
+  font-size: 2.5rem;
+  flex-shrink: 0;
+}
+
+.stat-details {
+  flex: 1;
+}
+
+.stat-details h4 {
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: #666666;
+  margin: 0 0 0.5rem 0;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.stat-number {
+  font-size: 2rem;
+  font-weight: 800;
+  color: #000000;
+  margin: 0 0 0.25rem 0;
+  line-height: 1;
+}
+
+.stat-description {
+  font-size: 0.85rem;
+  color: #999999;
+}
+
+.comparison-table h3 {
+  font-size: 1.5rem;
+  font-weight: 700;
+  margin: 0 0 1.5rem 0;
+  color: #000000;
+  text-align: center;
+}
+
 /* Responsive Design */
 @media (max-width: 768px) {
   .metrics {
@@ -394,5 +629,54 @@
     flex-direction: column;
     text-align: center;
     padding: 1.5rem;
+  }
+
+  .graph-overview-cards {
+    grid-template-columns: 1fr;
+    gap: 1.5rem;
+    margin-bottom: 3rem;
+  }
+
+  .graph-stat-card {
+    padding: 1.5rem;
+  }
+
+  .stat-number {
+    font-size: 1.75rem;
+  }
+
+  .sample-document-banner {
+    flex-direction: column;
+    text-align: center;
+    padding: 1.5rem;
+  }
+
+  .download-button {
+    width: 100%;
+    justify-content: center;
+  }
+
+  .ingestion-overview-cards {
+    grid-template-columns: 1fr;
+    gap: 1.5rem;
+    margin-bottom: 3rem;
+  }
+
+  .ingestion-stat-card {
+    padding: 1.5rem;
+  }
+
+  .granular-metrics-grid {
+    grid-template-columns: 1fr;
+    gap: 1.5rem;
+  }
+
+  .granular-metric-card {
+    padding: 1.5rem;
+  }
+
+  .metric-detail.highlight {
+    margin: 0.75rem -0.5rem;
+    padding: 0.75rem 0.5rem;
   }
 }
