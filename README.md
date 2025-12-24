@@ -54,31 +54,16 @@ Watch the system in action:
 
 ### Document Ingestion Performance
 
-**Total Ingestion Time**: 25.6 seconds (12-page PDF with 5 images, 5 tables)
-
-| Component                  | Time (s) | % of Total | Status                |
-| -------------------------- | -------- | ---------- | --------------------- |
-| **Storage Operations**     | 7.372    | 28.8%      | 🔴 Primary bottleneck |
-| **Table/Image Extraction** | 6.640    | 25.9%      | 🟡 Parallel working   |
-| **Neo4j Graph Building**   | 5.583    | 21.8%      | 🟡 Entity-heavy       |
-| **Vision Processing**      | 2.857    | 11.2%      | ✅ Good               |
-| **Embedding Generation**   | 1.362    | 5.3%       | ✅ Good               |
-| **Elasticsearch Indexing** | 0.292    | 1.1%       | ✅ Fast               |
-| **Qdrant Vector Storage**  | 0.188    | 0.7%       | ✅ Very fast          |
-| **Text Processing**        | 0.004    | 0.02%      | ✅ Negligible         |
-
-**Key Highlights:**
-
-- ✅ Parallel extraction working (saved 5.95 seconds)
-- ✅ Qdrant vector storage: 9.4ms per vector
-- ✅ Elasticsearch indexing: 19.5ms per document
-- 🔴 Image uploads: 3.441s (largest single bottleneck)
-- 🟡 Table extraction: 1.328s per table
-
-**Optimization Potential:**
-
-- Conservative: 22.6s (11.7% faster)
-- Aggressive: 13.0s (49.2% faster)
+| Component                  | Time (s) | % of Total |
+| -------------------------- | -------- | ---------- |
+| **Storage Operations**     | 7.372    | 28.8%      |
+| **Table/Image Extraction** | 6.640    | 25.9%      |
+| **Neo4j Graph Building**   | 5.583    | 21.8%      |
+| **Vision Processing**      | 2.857    | 11.2%      |
+| **Embedding Generation**   | 1.362    | 5.3%       |
+| **Elasticsearch Indexing** | 0.292    | 1.1%       |
+| **Qdrant Vector Storage**  | 0.188    | 0.7%       |
+| **Text Processing**        | 0.004    | 0.02%      |
 
 ---
 
@@ -86,199 +71,309 @@ Watch the system in action:
 
 #### Dense Retriever (Vector Similarity Search)
 
-| Model                              | Retrieval Time   | Relevance Score | Dimensions | Notes                             |
-| ---------------------------------- | ---------------- | --------------- | ---------- | --------------------------------- |
-| **intfloat/e5-base-v2**            | 20.5 ms          | 81.0%           | 768        | Baseline model                    |
-| **Thenlper/GTE-Base**              | 12.6 ms ⭐       | 84.0% ⭐        | 768        | +38% faster, +3.7% relevance      |
-| **Thenlper/GTE-Large**             | 10.8 ms ⭐⭐     | 84.9% ⭐⭐      | 1024       | +47% faster, +4.8% relevance      |
-| **intfloat/e5-large-v2**           | 10.5 ms ⭐⭐⭐   | 80.3% ⭐⭐⭐    | 1024       | +49% faster, -0.7% relevance      |
-| **intfloat/multilingual-e5-large** | 12.7 ms ⭐⭐⭐⭐ | 79.7% ⭐⭐⭐⭐  | 1024       | +38% faster, multilingual support |
-
-**Performance Summary:**
-
-- ⚡ **Fastest**: e5-large-v2 (10.5ms)
-- 🎯 **Most Accurate**: GTE-Large (84.9% relevance)
-- 🌍 **Multilingual**: multilingual-e5-large (79.7% relevance, cross-language support)
+| Model                              | Retrieval Time | Relevance Score | Dimensions |
+| ---------------------------------- | -------------- | --------------- | ---------- |
+| **intfloat/e5-base-v2**            | 20.5 ms        | 81.0%           | 768        |
+| **Thenlper/GTE-Base**              | 12.6 ms        | 84.0%           | 768        |
+| **Thenlper/GTE-Large**             | 10.8 ms        | 84.9%           | 1024       |
+| **intfloat/e5-large-v2**           | 10.5 ms        | 80.3%           | 1024       |
+| **intfloat/multilingual-e5-large** | 12.7 ms        | 79.7%           | 1024       |
 
 #### Sparse Retriever (BM25 Keyword Search)
 
-| Metric                     | Value    | Notes                                        |
-| -------------------------- | -------- | -------------------------------------------- |
-| **Average Retrieval Time** | 113.2 ms | ⭐⭐⭐ Good (under 200ms)                    |
-| **Relevance Score**        | 99.2%    | 🟢 Excellent - near-perfect keyword matching |
-| **Total Queries**          | 5        | Consistent performance                       |
-
-**Characteristics:**
-
-- ✅ Near-perfect keyword matching (99.2% relevance)
-- ✅ Stable 113ms response time
-- ✅ Independent of embedding model changes
+| Metric                     | Value    |
+| -------------------------- | -------- |
+| **Average Retrieval Time** | 113.2 ms |
+| **Relevance Score**        | 99.2%    |
 
 #### Image Retriever (Visual Similarity Search)
 
-| Model                                   | Retrieval Time | Relevance Score | Dimensions | Notes                          |
-| --------------------------------------- | -------------- | --------------- | ---------- | ------------------------------ |
-| **sentence-transformers/clip-ViT-L-14** | 51.2 ms        | 27.4%           | 768        | ⭐⭐⭐ Moderate performance    |
-| **CLIP ViT-B-32**                       | 505.1 ms       | 15.8%           | 512        | ⭐⭐ Moderate-slow             |
-| **SigLIP vit_base_patch16_siglip_224**  | 509.2 ms       | 1.9%            | 768        | 🔴 Poor (compatibility issues) |
-
-**Performance Analysis:**
-
-- ✅ **Best Model**: CLIP ViT-L-14 (51.2ms, 27.4% relevance)
-- ⚠️ **SigLIP Issues**: Significant degradation (1.9% relevance, 10x slower)
-- 🎯 **Use Case**: Visual content search in technical documents
+| Model                                   | Retrieval Time | Relevance Score | Dimensions |
+| --------------------------------------- | -------------- | --------------- | ---------- |
+| **sentence-transformers/clip-ViT-L-14** | 51.2 ms        | 27.4%           | 768        |
+| **CLIP ViT-B-32**                       | 505.1 ms       | 15.8%           | 512        |
+| **SigLIP vit_base_patch16_siglip_224**  | 509.2 ms       | 1.9%            | 768        |
 
 #### Knowledge Graph Retrieval
 
-**Unified Performance:**
-
-- **Average Retrieval Time**: 243 ms
-- **Max Retrieval Time**: 507 ms
-- **Total Queries**: 20 (4 query types × 5 queries)
-
-**Performance by Query Type:**
-
-| Query Type           | Average Duration | Max Duration | Queries | Ranking    |
-| -------------------- | ---------------- | ------------ | ------- | ---------- |
-| **graph_traversal**  | 107 ms           | 186 ms       | 5       | 🥇 Fastest |
-| **by_topics**        | 119 ms           | 214 ms       | 5       | 🥈         |
-| **by_section_title** | 223 ms           | 422 ms       | 5       | 🥉         |
-| **by_keywords**      | 670 ms           | 1.21 s       | 5       | Slowest    |
-
-**Chunk Retrieval:**
-
-- **Total Chunks Retrieved**: 94 chunks
-- **Average Chunks per Query**: 18.7 chunks
-- **Graph vs Hybrid**: Graph provides ~87% more chunks per query (18.7 vs 10.0)
+| Query Type           | Average Duration | Max Duration |
+| -------------------- | ---------------- | ------------ |
+| **graph_traversal**  | 107 ms           | 186 ms       |
+| **by_topics**        | 119 ms           | 214 ms       |
+| **by_section_title** | 223 ms           | 422 ms       |
+| **by_keywords**      | 670 ms           | 1.21 s       |
 
 #### Embedding Generation Performance
 
-| Embedding Type      | Average Time | Performance Rating | Notes                                   |
-| ------------------- | ------------ | ------------------ | --------------------------------------- |
-| **Text Embedding**  | 225.3 ms     | ⭐⭐ Moderate      | Semantic text vector generation         |
-| **Image Embedding** | 264.6 ms     | ⭐⭐ Moderate      | Visual feature extraction (CLIP/SigLIP) |
-
-**Generation Volume (6-hour window):**
-
-- **Text Embeddings**: ~64 embeddings (0.0030/sec)
-- **Image Embeddings**: ~11 embeddings (0.0005/sec)
+| Embedding Type      | Average Time |
+| ------------------- | ------------ |
+| **Text Embedding**  | 225.3 ms     |
+| **Image Embedding** | 264.6 ms     |
 
 ---
 
 ### Performance Summary Table
 
-| Component              | Metric       | Value        | Status                |
-| ---------------------- | ------------ | ------------ | --------------------- |
-| **Dense Retriever**    | Speed        | 10.5-12.7 ms | ✅ Excellent          |
-| **Dense Retriever**    | Relevance    | 79.7-84.9%   | ✅ Excellent          |
-| **Sparse Retriever**   | Speed        | 113.2 ms     | ✅ Good               |
-| **Sparse Retriever**   | Relevance    | 99.2%        | ✅ Excellent          |
-| **Image Retriever**    | Speed        | 51.2 ms      | ✅ Moderate           |
-| **Image Retriever**    | Relevance    | 27.4%        | 🟡 Moderate           |
-| **Knowledge Graph**    | Speed        | 243 ms       | ✅ Good               |
-| **Knowledge Graph**    | Chunks/Query | 18.7         | ✅ High recall        |
-| **Text Embedding**     | Generation   | 225.3 ms     | ✅ Moderate           |
-| **Image Embedding**    | Generation   | 264.6 ms     | ✅ Moderate           |
-| **Document Ingestion** | Total Time   | 25.6 s       | 🟡 Good (optimizable) |
-| **Qdrant Storage**     | Per Vector   | 9.4 ms       | ✅ Very fast          |
-| **Elasticsearch**      | Per Document | 19.5 ms      | ✅ Fast               |
+| Component              | Metric       | Value        |
+| ---------------------- | ------------ | ------------ |
+| **Dense Retriever**    | Speed        | 10.5-12.7 ms |
+| **Dense Retriever**    | Relevance    | 79.7-84.9%   |
+| **Sparse Retriever**   | Speed        | 113.2 ms     |
+| **Sparse Retriever**   | Relevance    | 99.2%        |
+| **Image Retriever**    | Speed        | 51.2 ms      |
+| **Image Retriever**    | Relevance    | 27.4%        |
+| **Knowledge Graph**    | Speed        | 243 ms       |
+| **Knowledge Graph**    | Chunks/Query | 18.7         |
+| **Text Embedding**     | Generation   | 225.3 ms     |
+| **Image Embedding**    | Generation   | 264.6 ms     |
+| **Document Ingestion** | Total Time   | 25.6 s       |
+| **Qdrant Storage**     | Per Vector   | 9.4 ms       |
+| **Elasticsearch**      | Per Document | 19.5 ms      |
 
 ---
 
 ### Model Performance Evolution
 
-**Dense Retriever Model Comparison:**
-
-| Aspect           | e5-base-v2 | GTE-Base | GTE-Large | e5-large-v2 | multilingual-e5-large | Improvement    |
-| ---------------- | ---------- | -------- | --------- | ----------- | --------------------- | -------------- |
-| **Speed**        | 20.5 ms    | 12.6 ms  | 10.8 ms   | 10.5 ms     | 12.7 ms               | +38-49% faster |
-| **Relevance**    | 81.0%      | 84.0%    | 84.9%     | 80.3%       | 79.7%                 | +4.8% better   |
-| **Dimensions**   | 768        | 768      | 1024      | 1024        | 1024                  | Higher quality |
-| **Capabilities** | English    | English  | English   | English     | Multilingual          | Cross-language |
+| Aspect           | e5-base-v2 | GTE-Base | GTE-Large | e5-large-v2 | multilingual-e5-large |
+| ---------------- | ---------- | -------- | --------- | ----------- | --------------------- |
+| **Speed**        | 20.5 ms    | 12.6 ms  | 10.8 ms   | 10.5 ms     | 12.7 ms               |
+| **Relevance**    | 81.0%      | 84.0%    | 84.9%     | 80.3%       | 79.7%                 |
+| **Dimensions**   | 768        | 768      | 1024      | 1024        | 1024                  |
+| **Capabilities** | English    | English  | English   | English     | Multilingual          |
 
 ---
 
 ## 🚀 Quick Start
 
+This guide will help you set up and run the Multimodal RAG system from scratch.
+
+### Prerequisites
+
+- **Docker & Docker Compose** - For running infrastructure services
+- **Python 3.9+** - For the backend API
+- **Node.js 18+** - For the frontend
+- **Supabase Account** - For PostgreSQL database and storage
+- **API Keys** (optional but recommended):
+  - Groq API key (for LLM answer generation)
+  - OpenAI API key (for vision LLM, if using)
+
+---
+
+### Step 1: Start Infrastructure Services
+
+Start all required services using Docker Compose:
+
+```bash
+# From the project root directory
+docker-compose up -d
+```
+
+This will start:
+
+- **Qdrant** (Vector Database) - `http://localhost:6333`
+- **Elasticsearch** (BM25 Index) - `http://localhost:9200`
+- **Neo4j** (Knowledge Graph) - `bolt://localhost:7687`
+- **MinIO** (S3 Storage) - `http://localhost:9000` (Console: `http://localhost:9090`)
+- **Prometheus** (Metrics) - `http://localhost:9091`
+- **Grafana** (Dashboards) - `http://localhost:3001`
+- **Loki** (Logs) - `http://localhost:3100`
+
+**Verify services are running:**
+
+- Qdrant Dashboard: `http://localhost:6333/dashboard`
+- Elasticsearch Health: `http://localhost:9200/_cluster/health`
+- MinIO Console: `http://localhost:9090` (login: `admin` / `admin12345`)
+
+---
+
+### Step 2: Set Up Supabase
+
+1. **Create a Supabase Project:**
+
+   - Go to [supabase.com](https://supabase.com) and create a new project
+   - Wait for the project to be fully provisioned
+
+2. **Get Your Supabase Credentials:**
+
+   - Go to **Settings** → **API**
+   - Copy the following:
+     - **Project URL** (e.g., `https://xxxxx.supabase.co`)
+     - **Service Role Key** (keep this secret!)
+     - **Anon Key** (optional, for frontend)
+
+3. **Create Database Tables:**
+   - Go to **SQL Editor** in your Supabase dashboard
+   - Open the file `db/db.sql` from this repository
+   - Copy and paste the entire SQL script into the SQL Editor
+   - Click **Run** to execute
+   - Verify tables are created: `documents`, `chunks`, `images`, `tables`
+
+---
+
+### Step 3: Configure Backend
+
+1. **Navigate to Backend Directory:**
+
+   ```bash
+   cd backend
+   ```
+
+2. **Install Python Dependencies:**
+
+   ```bash
+   pip install -r requirements.txt
+   ```
+
+3. **Create Environment File:**
+   Create a `.env` file in the `backend` directory with the following variables:
+
+   ```env
+   # Supabase Configuration
+   SUPABASE_URL=https://your-project.supabase.co
+   SUPABASE_SERVICE_ROLE_KEY=your-service-role-key
+   SUPABASE_ANON_KEY=your-anon-key
+
+   # Neo4j Configuration
+   NEO4J_PASSWORD=your-neo4j-password
+
+   # Optional: LLM API Keys
+   GROQ_API_KEY=your-groq-api-key
+   OPENAI_API_KEY=your-openai-api-key
+   ```
+
+4. **Configure `config.yaml`:**
+   - Open `backend/config.yaml`
+   - Review and adjust settings as needed:
+     - **Qdrant**: Already configured for localhost
+     - **Elasticsearch**: Already configured for localhost
+     - **MinIO**: Already configured for localhost
+     - **Neo4j**: Update `uri` if running in Docker: `bolt://neo4j:7687`
+     - **Embedding Models**: Adjust `device` (cpu/cuda) based on your hardware
+     - **LLM Provider**: Configure your preferred provider (groq, anthropic, ollama)
+
+---
+
+### Step 4: Initialize System Schemas
+
+Run the reconstruction script to create all necessary indexes, collections, and schemas:
+
+```bash
+# From the backend directory
+python scripts/pipeline_ops/reconstruct.py
+```
+
+This will:
+
+- ✅ Verify Supabase tables exist
+- ✅ Create Elasticsearch index with proper mappings
+- ✅ Create Qdrant collections (text_chunks, table_chunks, image_chunks)
+- ✅ Verify Neo4j constraints and indexes
+- ✅ Verify MinIO bucket exists
+
+**Note:** If you need to start fresh, you can wipe everything first:
+
+```bash
+python scripts/pipeline_ops/clean_slate.py --confirm
+# Then run reconstruct.py again
+```
+
+---
+
+### Step 5: Start Backend API
+
+1. **Navigate to Backend Directory:**
+
+   ```bash
+   cd backend
+   ```
+
+2. **Start the FastAPI Server:**
+
+   ```bash
+   uvicorn main:app --reload
+   ```
+
+   The API will be available at: `http://localhost:8000`
+
+   - API Docs: `http://localhost:8000/docs`
+   - Health Check: `http://localhost:8000/health`
+
+---
+
+### Step 6: Start Frontend
+
+1. **Navigate to Frontend Directory:**
+
+   ```bash
+   cd frontend
+   ```
+
+2. **Install Dependencies:**
+
+   ```bash
+   npm install
+   ```
+
+3. **Start Development Server:**
+
+   ```bash
+   npm run dev
+   ```
+
+   The frontend will be available at: `http://localhost:5173` (or the port shown in terminal)
+
+---
+
+### Step 7: Verify Everything is Running
+
+1. **Backend API:** `http://localhost:8000/health` should return `{"status": "healthy"}`
+2. **Frontend:** Open `http://localhost:5173` in your browser
+3. **Qdrant:** `http://localhost:6333/dashboard` - Collections should be visible
+4. **Elasticsearch:** `http://localhost:9200/_cat/indices` - `rag_chunks` index should exist
+5. **MinIO:** `http://localhost:9090` - `raw-documents` bucket should exist
+
+---
+
 ### Service Access URLs
 
-When running services via Docker Compose, access them at the following localhost URLs:
+Once everything is running, access services at:
 
-#### Qdrant (Vector Database)
-
-- **REST API**: `http://localhost:6333`
-- **Dashboard/Web UI**: `http://localhost:6333/dashboard`
-- **gRPC**: `localhost:6334` (gRPC endpoint, not HTTP)
-
-#### Elasticsearch (BM25 Sparse Index)
-
-- **HTTP API**: `http://localhost:9200`
-- **Cluster Health**: `http://localhost:9200/_cluster/health`
-- **Transport**: `localhost:9300` (not HTTP)
-
-#### MinIO (S3-compatible Storage)
-
-- **S3 API**: `http://localhost:9000`
-- **Console UI**: `http://localhost:9090`
-  - Default credentials: `admin` / `admin12345`
-
-**Quick Access:**
-
-- Qdrant Dashboard: `http://localhost:6333`
-- Elasticsearch: `http://localhost:9200`
-- MinIO Console: `http://localhost:9090` (login with admin/admin12345)
-
-All services are on the `rag-network` Docker network and can communicate using their service names (`qdrant`, `elasticsearch`, `minio`).
+| Service              | URL                               | Credentials            |
+| -------------------- | --------------------------------- | ---------------------- |
+| **Backend API**      | `http://localhost:8000`           | -                      |
+| **API Docs**         | `http://localhost:8000/docs`      | -                      |
+| **Frontend**         | `http://localhost:5173`           | -                      |
+| **Qdrant Dashboard** | `http://localhost:6333/dashboard` | -                      |
+| **Elasticsearch**    | `http://localhost:9200`           | -                      |
+| **MinIO Console**    | `http://localhost:9090`           | `admin` / `admin12345` |
+| **Grafana**          | `http://localhost:3001`           | `admin` / `admin`      |
+| **Prometheus**       | `http://localhost:9091`           | -                      |
 
 ---
 
-## 🎯 Key Features
+### Troubleshooting
 
-### Hybrid Retrieval
+**Backend won't start:**
 
-- **Sparse (BM25)**: 99.2% keyword matching relevance, 113ms response
-- **Dense (Vector)**: 79.7-84.9% semantic relevance, 10.5-12.7ms response
-- **Graph-based**: 243ms average, 18.7 chunks per query
-- **Multimodal**: Text, tables, images with unified scoring
+- Check that all environment variables are set in `backend/.env`
+- Verify Supabase credentials are correct
+- Ensure Docker services are running: `docker-compose ps`
 
-### Multimodal Understanding
+**Frontend won't connect:**
 
-- **Text**: Fast extraction and chunking (0.004s processing)
-- **Tables**: Camelot extraction with JSON/markdown conversion
-- **Images**: CLIP embeddings with captioning (51.2ms retrieval)
-- **Diagrams**: OCR + visual similarity search
+- Check that backend API is running on port 8000
+- Verify CORS settings in `backend/config.yaml` include your frontend URL
 
-### Knowledge Graph
+**Database connection errors:**
 
-- **Entity Extraction**: spaCy NER with cross-document resolution
-- **Relationship Mapping**: Co-occurrence analysis
-- **Multi-hop Reasoning**: Graph traversal for complex queries
-- **Topic Navigation**: Cross-document topic linking
+- Verify Supabase project is active
+- Check that `db/db.sql` was executed successfully
+- Ensure `SUPABASE_SERVICE_ROLE_KEY` is set correctly
 
-### Performance Optimizations
+**Collection/index errors:**
 
-- **Parallel Extraction**: Saves 5.95s per document
-- **Fast Vector Storage**: 9.4ms per vector (Qdrant)
-- **Efficient Indexing**: 19.5ms per document (Elasticsearch)
-- **Model Evolution**: 38-49% speed improvements across models
-
----
-
-## 📈 Performance Insights
-
-### Strengths
-
-- ✅ **Fast Retrieval**: Sub-15ms dense retrieval, sub-250ms graph retrieval
-- ✅ **High Relevance**: 80-99% relevance scores across retrieval types
-- ✅ **Parallel Processing**: Efficient extraction and indexing
-- ✅ **Scalable Architecture**: Multi-index strategy with independent scaling
-
-### Optimization Opportunities
-
-- 🔴 **Image Uploads**: 3.441s bottleneck (connection pooling, parallel uploads)
-- 🟡 **Table Extraction**: 1.328s per table (library optimization)
-- 🟡 **Graph Building**: 5.583s (optional feature, faster NER)
-- 🟡 **Image Relevance**: 27.4% (model fine-tuning, preprocessing)
+- Run `python scripts/pipeline_ops/reconstruct.py` to recreate missing schemas
+- Check service logs: `docker-compose logs [service-name]`
 
 ---
 
@@ -348,13 +443,9 @@ Key metrics tracked:
 
 ## 📝 License
 
-[Add your license information here]
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
 
----
-
-## 🤝 Contributing
-
-[Add contribution guidelines here]
+Copyright (c) 2025 Hisham
 
 ---
 
