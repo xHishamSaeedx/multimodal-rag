@@ -4,423 +4,359 @@ A next-generation Retrieval-Augmented Generation system optimized for large-scal
 
 This architecture combines hybrid retrieval (BM25 + dense vectors + metadata filtering) with multimodal understanding (text, tables, images, diagrams) and optional graph-based reasoning for complex multi-hop queries. It is designed for speed, accuracy, scalability, and long-term maintainability, supported by full MLOps pipelines for continuous improvement.
 
-## Table of Contents
+## 📹 Demo Video
 
-- [Service Access URLs](#service-access-urls)
-- [Data & Storage Layer](#-1-data--storage-layer)
-- [ML Services Layer](#-2-ml-services-layer)
-- [Retrieval & Reasoning Layer](#-3-retrieval--reasoning-layer)
-- [MLOps Layer](#-4-mlops-layer)
-- [Query Processing Flows](#query-processing-flows)
-  - [Flow 1: Simple Textual Question](#flow-1-simple-textual-question-fast-path)
-  - [Flow 2: Technical Query Requiring Tables + Text](#flow-2-technical-query-requiring-tables--text-multimodal-path)
-  - [Flow 3: Architecture/Systems Question](#flow-3-architecturesystems-question-graph-path)
-  - [Flow 4: Visual/Diagram-Oriented Query](#flow-4-visualdiagram-oriented-query-image-path)
-  - [Flow 5: Compliance Question](#flow-5-compliance-question-metadata--search-mix)
-  - [Flow 6: Very Complex Query](#flow-6-very-complex-query-multi-step-agentic-reasoning)
+Watch the system in action:
 
-## Service Access URLs
+<div align="center">
+  <a href="https://youtu.be/WwYofMSvdPE" target="_blank">
+    <img src="https://img.youtube.com/vi/WwYofMSvdPE/maxresdefault.jpg" alt="Multimodal RAG Demo Video" width="800" style="max-width: 100%; border-radius: 8px;">
+  </a>
+</div>
+
+<p align="center">
+  <a href="https://youtu.be/WwYofMSvdPE" target="_blank">🎥 Watch on YouTube</a>
+</p>
+
+## 🏗️ System Architecture
+
+### High-Level Architecture
+
+<div align="center">
+  <img src="./docs/diagrams/system-architecture.png" alt="System Architecture" width="100%" style="max-width: 1200px;">
+</div>
+
+### Document Processing Flow
+
+<div align="center">
+  <img src="./docs/diagrams/document-processing-flow.png" alt="Document Processing Flow" width="100%" style="max-width: 1200px;">
+</div>
+
+### Query Processing Flow
+
+<div align="center">
+  <img src="./docs/diagrams/query-processing-flow.png" alt="Query Processing Flow" width="100%" style="max-width: 1200px;">
+</div>
+
+### End-to-End Pipeline
+
+<div align="center">
+  <img src="./docs/diagrams/end-to-end-pipeline.png" alt="End-to-End Pipeline" width="100%" style="max-width: 1200px;">
+</div>
+
+### Executive Summary
+
+<div align="center">
+  <img src="./docs/diagrams/executive.png" alt="Executive Summary" width="100%" style="max-width: 1200px;">
+</div>
+
+## 📊 Performance Metrics
+
+### Document Ingestion Performance
+
+**Total Ingestion Time**: 25.6 seconds (12-page PDF with 5 images, 5 tables)
+
+| Component                  | Time (s) | % of Total | Status                |
+| -------------------------- | -------- | ---------- | --------------------- |
+| **Storage Operations**     | 7.372    | 28.8%      | 🔴 Primary bottleneck |
+| **Table/Image Extraction** | 6.640    | 25.9%      | 🟡 Parallel working   |
+| **Neo4j Graph Building**   | 5.583    | 21.8%      | 🟡 Entity-heavy       |
+| **Vision Processing**      | 2.857    | 11.2%      | ✅ Good               |
+| **Embedding Generation**   | 1.362    | 5.3%       | ✅ Good               |
+| **Elasticsearch Indexing** | 0.292    | 1.1%       | ✅ Fast               |
+| **Qdrant Vector Storage**  | 0.188    | 0.7%       | ✅ Very fast          |
+| **Text Processing**        | 0.004    | 0.02%      | ✅ Negligible         |
+
+**Key Highlights:**
+
+- ✅ Parallel extraction working (saved 5.95 seconds)
+- ✅ Qdrant vector storage: 9.4ms per vector
+- ✅ Elasticsearch indexing: 19.5ms per document
+- 🔴 Image uploads: 3.441s (largest single bottleneck)
+- 🟡 Table extraction: 1.328s per table
+
+**Optimization Potential:**
+
+- Conservative: 22.6s (11.7% faster)
+- Aggressive: 13.0s (49.2% faster)
+
+---
+
+### Retrieval Performance Comparison
+
+#### Dense Retriever (Vector Similarity Search)
+
+| Model                              | Retrieval Time   | Relevance Score | Dimensions | Notes                             |
+| ---------------------------------- | ---------------- | --------------- | ---------- | --------------------------------- |
+| **intfloat/e5-base-v2**            | 20.5 ms          | 81.0%           | 768        | Baseline model                    |
+| **Thenlper/GTE-Base**              | 12.6 ms ⭐       | 84.0% ⭐        | 768        | +38% faster, +3.7% relevance      |
+| **Thenlper/GTE-Large**             | 10.8 ms ⭐⭐     | 84.9% ⭐⭐      | 1024       | +47% faster, +4.8% relevance      |
+| **intfloat/e5-large-v2**           | 10.5 ms ⭐⭐⭐   | 80.3% ⭐⭐⭐    | 1024       | +49% faster, -0.7% relevance      |
+| **intfloat/multilingual-e5-large** | 12.7 ms ⭐⭐⭐⭐ | 79.7% ⭐⭐⭐⭐  | 1024       | +38% faster, multilingual support |
+
+**Performance Summary:**
+
+- ⚡ **Fastest**: e5-large-v2 (10.5ms)
+- 🎯 **Most Accurate**: GTE-Large (84.9% relevance)
+- 🌍 **Multilingual**: multilingual-e5-large (79.7% relevance, cross-language support)
+
+#### Sparse Retriever (BM25 Keyword Search)
+
+| Metric                     | Value    | Notes                                        |
+| -------------------------- | -------- | -------------------------------------------- |
+| **Average Retrieval Time** | 113.2 ms | ⭐⭐⭐ Good (under 200ms)                    |
+| **Relevance Score**        | 99.2%    | 🟢 Excellent - near-perfect keyword matching |
+| **Total Queries**          | 5        | Consistent performance                       |
+
+**Characteristics:**
+
+- ✅ Near-perfect keyword matching (99.2% relevance)
+- ✅ Stable 113ms response time
+- ✅ Independent of embedding model changes
+
+#### Image Retriever (Visual Similarity Search)
+
+| Model                                   | Retrieval Time | Relevance Score | Dimensions | Notes                          |
+| --------------------------------------- | -------------- | --------------- | ---------- | ------------------------------ |
+| **sentence-transformers/clip-ViT-L-14** | 51.2 ms        | 27.4%           | 768        | ⭐⭐⭐ Moderate performance    |
+| **CLIP ViT-B-32**                       | 505.1 ms       | 15.8%           | 512        | ⭐⭐ Moderate-slow             |
+| **SigLIP vit_base_patch16_siglip_224**  | 509.2 ms       | 1.9%            | 768        | 🔴 Poor (compatibility issues) |
+
+**Performance Analysis:**
+
+- ✅ **Best Model**: CLIP ViT-L-14 (51.2ms, 27.4% relevance)
+- ⚠️ **SigLIP Issues**: Significant degradation (1.9% relevance, 10x slower)
+- 🎯 **Use Case**: Visual content search in technical documents
+
+#### Knowledge Graph Retrieval
+
+**Unified Performance:**
+
+- **Average Retrieval Time**: 243 ms
+- **Max Retrieval Time**: 507 ms
+- **Total Queries**: 20 (4 query types × 5 queries)
+
+**Performance by Query Type:**
+
+| Query Type           | Average Duration | Max Duration | Queries | Ranking    |
+| -------------------- | ---------------- | ------------ | ------- | ---------- |
+| **graph_traversal**  | 107 ms           | 186 ms       | 5       | 🥇 Fastest |
+| **by_topics**        | 119 ms           | 214 ms       | 5       | 🥈         |
+| **by_section_title** | 223 ms           | 422 ms       | 5       | 🥉         |
+| **by_keywords**      | 670 ms           | 1.21 s       | 5       | Slowest    |
+
+**Chunk Retrieval:**
+
+- **Total Chunks Retrieved**: 94 chunks
+- **Average Chunks per Query**: 18.7 chunks
+- **Graph vs Hybrid**: Graph provides ~87% more chunks per query (18.7 vs 10.0)
+
+#### Embedding Generation Performance
+
+| Embedding Type      | Average Time | Performance Rating | Notes                                   |
+| ------------------- | ------------ | ------------------ | --------------------------------------- |
+| **Text Embedding**  | 225.3 ms     | ⭐⭐ Moderate      | Semantic text vector generation         |
+| **Image Embedding** | 264.6 ms     | ⭐⭐ Moderate      | Visual feature extraction (CLIP/SigLIP) |
+
+**Generation Volume (6-hour window):**
+
+- **Text Embeddings**: ~64 embeddings (0.0030/sec)
+- **Image Embeddings**: ~11 embeddings (0.0005/sec)
+
+---
+
+### Performance Summary Table
+
+| Component              | Metric       | Value        | Status                |
+| ---------------------- | ------------ | ------------ | --------------------- |
+| **Dense Retriever**    | Speed        | 10.5-12.7 ms | ✅ Excellent          |
+| **Dense Retriever**    | Relevance    | 79.7-84.9%   | ✅ Excellent          |
+| **Sparse Retriever**   | Speed        | 113.2 ms     | ✅ Good               |
+| **Sparse Retriever**   | Relevance    | 99.2%        | ✅ Excellent          |
+| **Image Retriever**    | Speed        | 51.2 ms      | ✅ Moderate           |
+| **Image Retriever**    | Relevance    | 27.4%        | 🟡 Moderate           |
+| **Knowledge Graph**    | Speed        | 243 ms       | ✅ Good               |
+| **Knowledge Graph**    | Chunks/Query | 18.7         | ✅ High recall        |
+| **Text Embedding**     | Generation   | 225.3 ms     | ✅ Moderate           |
+| **Image Embedding**    | Generation   | 264.6 ms     | ✅ Moderate           |
+| **Document Ingestion** | Total Time   | 25.6 s       | 🟡 Good (optimizable) |
+| **Qdrant Storage**     | Per Vector   | 9.4 ms       | ✅ Very fast          |
+| **Elasticsearch**      | Per Document | 19.5 ms      | ✅ Fast               |
+
+---
+
+### Model Performance Evolution
+
+**Dense Retriever Model Comparison:**
+
+| Aspect           | e5-base-v2 | GTE-Base | GTE-Large | e5-large-v2 | multilingual-e5-large | Improvement    |
+| ---------------- | ---------- | -------- | --------- | ----------- | --------------------- | -------------- |
+| **Speed**        | 20.5 ms    | 12.6 ms  | 10.8 ms   | 10.5 ms     | 12.7 ms               | +38-49% faster |
+| **Relevance**    | 81.0%      | 84.0%    | 84.9%     | 80.3%       | 79.7%                 | +4.8% better   |
+| **Dimensions**   | 768        | 768      | 1024      | 1024        | 1024                  | Higher quality |
+| **Capabilities** | English    | English  | English   | English     | Multilingual          | Cross-language |
+
+---
+
+## 🚀 Quick Start
+
+### Service Access URLs
 
 When running services via Docker Compose, access them at the following localhost URLs:
 
-### Qdrant (Vector Database)
+#### Qdrant (Vector Database)
+
 - **REST API**: `http://localhost:6333`
 - **Dashboard/Web UI**: `http://localhost:6333/dashboard`
 - **gRPC**: `localhost:6334` (gRPC endpoint, not HTTP)
 
-### Elasticsearch (BM25 Sparse Index)
+#### Elasticsearch (BM25 Sparse Index)
+
 - **HTTP API**: `http://localhost:9200`
 - **Cluster Health**: `http://localhost:9200/_cluster/health`
 - **Transport**: `localhost:9300` (not HTTP)
 
-### MinIO (S3-compatible Storage)
+#### MinIO (S3-compatible Storage)
+
 - **S3 API**: `http://localhost:9000`
 - **Console UI**: `http://localhost:9090`
   - Default credentials: `admin` / `admin12345`
 
 **Quick Access:**
+
 - Qdrant Dashboard: `http://localhost:6333`
 - Elasticsearch: `http://localhost:9200`
 - MinIO Console: `http://localhost:9090` (login with admin/admin12345)
 
 All services are on the `rag-network` Docker network and can communicate using their service names (`qdrant`, `elasticsearch`, `minio`).
 
-## 📌 1. Data & Storage Layer
+---
 
-### 1.1 Raw Data Lake
+## 🎯 Key Features
 
-Stores all unprocessed enterprise documents (PDFs, DOCX, HTML, CSV, images, PPTs, architecture diagrams).
+### Hybrid Retrieval
 
-- **Storage**: S3 / GCS / Azure Blob / MinIO
-- **Organized by**: `source_system / document_type / version`
+- **Sparse (BM25)**: 99.2% keyword matching relevance, 113ms response
+- **Dense (Vector)**: 79.7-84.9% semantic relevance, 10.5-12.7ms response
+- **Graph-based**: 243ms average, 18.7 chunks per query
+- **Multimodal**: Text, tables, images with unified scoring
 
-### 1.2 Processed Document Store
+### Multimodal Understanding
 
-Normalized representation of each document after extraction:
+- **Text**: Fast extraction and chunking (0.004s processing)
+- **Tables**: Camelot extraction with JSON/markdown conversion
+- **Images**: CLIP embeddings with captioning (51.2ms retrieval)
+- **Diagrams**: OCR + visual similarity search
 
-- Extracted text
-- Tables as JSON/markdown
-- Images & diagrams
-- OCR output
-- Metadata (author, tags, version, ACLs)
+### Knowledge Graph
 
-Stored in a document database (Postgres/Supabase/Mongo).
+- **Entity Extraction**: spaCy NER with cross-document resolution
+- **Relationship Mapping**: Co-occurrence analysis
+- **Multi-hop Reasoning**: Graph traversal for complex queries
+- **Topic Navigation**: Cross-document topic linking
 
-### 1.3 Vector & Sparse Indexes
+### Performance Optimizations
 
-Three parallel indexes power hybrid retrieval:
+- **Parallel Extraction**: Saves 5.95s per document
+- **Fast Vector Storage**: 9.4ms per vector (Qdrant)
+- **Efficient Indexing**: 19.5ms per document (Elasticsearch)
+- **Model Evolution**: 38-49% speed improvements across models
 
-**Sparse Index (BM25 / Elasticsearch)**
-- Fast keyword + phrase search
-- Works for IDs, log terms, field names
+---
 
-**Dense Vector Index (Qdrant / Weaviate / Milvus)**
-- Text embeddings
-- Table embeddings
-- Image embeddings (CLIP/SigLIP)
+## 📈 Performance Insights
 
-**Metadata Filters**
-- Department, date range, version, file type
-- Modality routing
+### Strengths
 
-### 1.4 Optional Knowledge Graph
+- ✅ **Fast Retrieval**: Sub-15ms dense retrieval, sub-250ms graph retrieval
+- ✅ **High Relevance**: 80-99% relevance scores across retrieval types
+- ✅ **Parallel Processing**: Efficient extraction and indexing
+- ✅ **Scalable Architecture**: Multi-index strategy with independent scaling
 
-A graph database (Neo4j / ArangoDB) stores:
+### Optimization Opportunities
 
-- Entities (services, APIs, components, policies)
-- Multimodal nodes (images, tables, text chunks)
-- Relationships (depends_on, refers_to, contains, version_of)
+- 🔴 **Image Uploads**: 3.441s bottleneck (connection pooling, parallel uploads)
+- 🟡 **Table Extraction**: 1.328s per table (library optimization)
+- 🟡 **Graph Building**: 5.583s (optional feature, faster NER)
+- 🟡 **Image Relevance**: 27.4% (model fine-tuning, preprocessing)
 
-Used only for queries requiring relational or multi-hop reasoning.
+---
 
-## 📌 2. ML Services Layer
+## 📚 Architecture Components
 
-### 2.1 Multimodal Ingestion Pipeline
+### Data & Storage Layer
 
-Extracts and structures content from every document type:
+- **Raw Data Lake**: MinIO/S3 for unprocessed documents
+- **Processed Document Store**: Supabase PostgreSQL for metadata
+- **Vector Database**: Qdrant for dense embeddings
+- **Sparse Index**: Elasticsearch for BM25 search
+- **Knowledge Graph**: Neo4j for entity relationships
 
-- **Text**: PyMuPDF, Tika
-- **Images**: CLIP/SigLIP embeddings, captioning
-- **Tables**: Camelot/Tabula → JSON
-- **OCR**: Tesseract/LayoutLMv3
+### ML Services Layer
 
-All content is chunked into semantic blocks (text, table, image, mixed).
+- **Multimodal Ingestion**: Text, table, image extraction
+- **Embedding Services**: Text (E5/GTE), Image (CLIP/SigLIP)
+- **Knowledge Graph Builder**: Entity extraction, relationship mapping
 
-### 2.2 Embedding Services
+### Retrieval & Reasoning Layer
 
-Independent microservices for:
+- **Query Router**: Modality detection and routing
+- **Hybrid Retrieval**: Parallel sparse + dense + graph search
+- **Multimodal Fusion**: Score normalization and weighted merging
+- **Answer Generation**: LLM with hallucination guardrails
 
-- Text embedding (E5/GTE/SBERT)
-- Table embedding (flattened or model-based)
-- Image embedding (CLIP/SigLIP)
-- Diagram text extraction + embeddings
+### MLOps Layer
 
-All served over REST/gRPC.
+- **Experiment Tracking**: Model versioning and metrics
+- **Data Versioning**: Document and embedding versioning
+- **Automated Pipelines**: Ingestion, embedding, indexing
+- **Monitoring**: Prometheus + Grafana for real-time metrics
 
-### 2.3 Knowledge Graph Builder (Optional)
+---
 
-Constructs or updates the enterprise KG by:
+## 🔧 Technology Stack
 
-- Entity extraction (NER)
-- Relationship extraction (LLM-based)
-- Linking multimodal chunks
-- Version tracking between documents
+- **Vector Database**: Qdrant
+- **Sparse Search**: Elasticsearch (BM25)
+- **Graph Database**: Neo4j
+- **Object Storage**: MinIO (S3-compatible)
+- **Database**: Supabase (PostgreSQL)
+- **Embedding Models**:
+  - Text: `intfloat/multilingual-e5-large` (1024d)
+  - Image: `sentence-transformers/clip-ViT-L-14` (768d)
+- **NLP**: spaCy (NER), BLIP (image captioning)
+- **Monitoring**: Prometheus + Grafana
 
-## 📌 3. Retrieval & Reasoning Layer
+---
 
-### 3.1 Query Router & Rewriter
+## 📊 Monitoring
 
-Classifies user query into:
+Access real-time metrics at:
 
-- Simple factual lookup
-- Document retrieval
-- "How does X work"
-- Dependency/impact analysis
-- Multimodal need (image/table/diagram)
+- **Prometheus**: `http://localhost:9091`
+- **Grafana**: `http://localhost:3001`
 
-Rewrites vague queries into precise sub-queries.
+Key metrics tracked:
 
-### 3.2 Hybrid Retrieval Pipeline (Core)
+- Retrieval latency by type (sparse, dense, graph, image)
+- Relevance scores per retrieval method
+- Embedding generation times
+- Document ingestion performance
+- Knowledge graph query performance
 
-Default retrieval path for all queries:
+---
 
-1. Sparse retrieval (BM25)
-2. Dense retrieval (vector)
-3. Metadata filtering
-4. Multimodal retrieval (text + tables + images)
-5. Reranking with a cross encoder or LLM
+## 📝 License
 
-This combination maximizes recall AND relevance.
+[Add your license information here]
 
-### 3.3 Optional Graph Retrieval
+---
 
-Triggered only when:
+## 🤝 Contributing
 
-- Multi-hop reasoning needed
-- Dependencies must be traced
-- Architecture/impact queries
+[Add contribution guidelines here]
 
-Graph traversal fetches connected entities + associated documents.
+---
 
-### 3.4 Multimodal Fusion
-
-Combines retrieved:
-
-- Text chunks
-- Table summaries
-- Image captions
-- KG context (if available)
-
-### 3.5 Answer Generation + Hallucination Guardrails
-
-LLM produces final answer with:
-
-- Explicit citations
-- Reference snippets
-- Highlighted diagrams/tables
-- Validation against retrieved sources
-- Hallucination filtering (unsupported claims removed)
-
-## 📌 4. MLOps Layer
-
-### 4.1 Experiment Tracking & Model Registry
-
-Using MLflow/W&B to track:
-
-- Embedding model versions
-- Chunking strategies
-- Reranking models
-- KG extraction prompts
-- Retrieval metrics
-
-Models promoted via a registry.
-
-### 4.2 Data Versioning
-
-DVC/LakeFS maintains versions of:
-
-- Raw documents
-- Processed chunks
-- Embeddings
-- KG snapshots
-- Retriever configurations
-
-### 4.3 Automated Pipelines (Airflow/Prefect)
-
-Pipelines include:
-
-- Ingestion (daily/hourly)
-- Embedding generation
-- Index refresh
-- KG updates
-- Evaluation & quality scoring
-- Model retraining
-
-### 4.4 Continuous Deployment (CI/CD)
-
-All services containerized (Docker) and deployed via Kubernetes with:
-
-- Staging → canary → production
-- Integration tests
-- Latency monitoring
-
-### 4.5 Monitoring & Feedback Loops
-
-Tracks:
-
-- Retrieval precision/recall
-- Graph traversal latency
-- LLM answer quality
-- Hallucination rate
-- Multimodal accuracy
-- User feedback (up/down votes)
-
-Feedback automatically improves rerankers + routing models.
-
-## Query Processing Flows
-
-### Flow 1: Simple Textual Question (Fast Path)
-
-**Example query:**
-> "What is our refund policy?"
-
-**Step-by-Step Flow:**
-
-1. **User → Frontend UI**: User types query in chat/search
-2. **Frontend → Backend API**: Query sent to API with user auth context
-3. **Backend → Query Router**: Router detects:
-   - Modality: text-only
-   - No need for graph reasoning
-   - No need for image/table tools
-   - → Selects the **Hybrid Fast Path**
-4. **Hybrid Search Engine**:
-   - BM25 retrieves PDF policy docs
-   - Vector DB retrieves semantically relevant sections
-   - Metadata filters remove old versions
-   - Merge (sparse + dense)
-   - Reranker reorders top chunks
-5. **Multimodal Fusion**: Only text chunks included (since image/table not needed)
-6. **LLM Answer Generator**: LLM composes a concise answer:
-   - Quotes from documents
-   - Cites sources
-   - Checks hallucination guard ("is every sentence supported?")
-7. **Backend → Frontend**: UI shows:
-   - Final answer
-   - Highlighted PDF excerpt
-   - Link to the source document
-
-### Flow 2: Technical Query Requiring Tables + Text (Multimodal Path)
-
-**Example query:**
-> "Compare the API rate limits for free vs premium users."
-
-**Step-by-Step Flow:**
-
-1. **Frontend → Backend API**: Query received
-2. **Router Determines Needed Modalities**: Router identifies:
-   - Query involves numerical comparison
-   - Likely contained in tables
-   - → Activates the **Multimodal Retrieval Path**
-3. **Hybrid Search**:
-   - Sparse search finds PDFs and Confluence pages mentioning "rate limits"
-   - Vector search extracts semantic matches
-   - Table extractor finds relevant tables (via table embeddings)
-4. **Table Processing Service**: Tables converted into:
-   - JSON
-   - Markdown
-   - "Clean table text" for the LLM
-5. **Reranker**: Scores text + table chunks mixed
-6. **Fusion Layer**: Combines:
-   - Textual descriptions
-   - Table rows of "free" vs "premium"
-   - Surrounding explanations from documents
-7. **LLM Answer Generation**: Produces:
-   - Clear comparison
-   - Summarized bullet points
-   - Citations pulled from table sources
-8. **Frontend Output**: Shows:
-   - Answer
-   - Original tables
-   - Relevant text paragraphs
-
-### Flow 3: Architecture/Systems Question (Graph Path)
-
-**Example query:**
-> "If we change the billing database schema, which services will be affected?"
-
-This is a dependency question → Graph path.
-
-**Step-by-Step Flow:**
-
-1. **User → Backend API**: Query arrives
-2. **Router Detects Need for Graph**:
-   - Keywords: "affected", "dependencies", "impact"
-   - Entities detected: "billing database"
-   - → Activates the **Graph Reasoning Path**
-3. **Entity Lookup**: Graph microservice finds:
-   - Node: Billing DB
-   - Direct neighbors: Billing Service
-   - Downstream services: Invoicer, Notifications, Analytics
-4. **Graph Traversal**: 2-hop traversal collects:
-   - Impacted services
-   - Linked documents
-   - Version histories
-5. **Hybrid Retrieval for Context**: For each impacted entity:
-   - Sparse + dense retrieval fetches relevant docs
-   - Diagrams/images pulled (architecture diagrams)
-   - Metadata filter narrows to latest versions
-6. **Fusion Layer**: Combines:
-   - Graph structure ("Service A → Service B")
-   - Architecture diagrams (via captioned image embeddings)
-   - Textual descriptions of dependencies
-7. **LLM Answer Generator**: Outputs:
-   - List of impacted services
-   - Reasoning path (why they are connected)
-   - Citations + diagram references
-8. **Frontend Output**: Displays:
-   - List of services
-   - Impact summary
-   - Interactive dependency graph
-
-### Flow 4: Visual/Diagram-Oriented Query (Image Path)
-
-**Example query:**
-> "Show me the latest architecture diagram for the payment pipeline."
-
-**Step-by-Step Flow:**
-
-1. **User → API**: Query arrives
-2. **Router → Image Modalities Needed**: Identifies:
-   - Keywords: "diagram", "architecture"
-   - → Activates **Image Retrieval Path**
-3. **Image Embedding Service**: Vector DB is searched using:
-   - CLIP/SigLIP embeddings
-   - Diagram captions ("payment pipeline architecture v3")
-4. **Sparse Search**: Looks for filenames/pages containing:
-   - "architecture"
-   - "payment pipeline"
-5. **Reranker**: Ranks images based on relevance to query
-6. **LLM Optional Caption Generation**: If needed, LLM generates:
-   - A summary
-   - Or explanation of the diagram
-7. **Output**: Frontend displays:
-   - The diagram image
-   - Summary/explanation
-   - Link to the source document
-
-### Flow 5: Compliance Question (Metadata + Search Mix)
-
-**Example query:**
-> "Show all documents on employee data handling updated after Jan 2024."
-
-**Step-by-Step Flow:**
-
-1. **Frontend → Backend API**: Query received
-2. **Router**: Understands:
-   - Compliance domain
-   - Requires filtering by date & policy docs
-   - → Activates **Hybrid Search with Metadata Filtering**
-3. **BM25**: Finds all "employee data", "GDPR", "personal data" docs
-4. **Vector Search**: Retrieves semantic matches ("handling", "processing", "storage policies")
-5. **Metadata Filtering**: Removes documents older than Jan 2024
-6. **Reranker**: Scores remaining candidates for relevance
-7. **LLM Output**: Generates:
-   - A consolidated list
-   - Summaries of each document
-   - Direct citations
-8. **Frontend**: Shows:
-   - Doc title
-   - Updated date
-   - Summary
-   - Source links
-
-### Flow 6: Very Complex Query (Multi-Step Agentic Reasoning)
-
-**Example query:**
-> "Prepare a migration plan for moving our payments service to microservices using past architecture documents."
-
-This activates:
-- Query rewriting
-- Task decomposition
-- Hybrid + Multimodal + Graph retrieval
-- Multi-step reasoning
-
-**Step-by-Step Flow:**
-
-1. **Query Router → Task Decomposition**: Splits into:
-   - Find past architecture docs
-   - Identify current payment service dependencies
-   - Retrieve best-practice guidelines
-   - Produce stepwise migration plan
-2. **Hybrid Retrieval + Graph Reasoning**: For each subtask:
-   - Fetch diagrams
-   - Fetch service dependencies
-   - Fetch engineering docs
-   - Assemble chunks
-3. **Fusion Layer**: Cross-modal knowledge assembled
-4. **LLM**: Produces:
-   - Migration phases
-   - Risks
-   - Diagrams
-   - Citations
-5. **Frontend**: Displays the structured plan
+**Last Updated**: December 21, 2025  
+**Performance Data**: Based on real-time execution logs and Prometheus metrics
