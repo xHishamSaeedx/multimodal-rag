@@ -110,6 +110,23 @@ Watch the system in action:
 | **Text Embedding**  | 225.3 ms     |
 | **Image Embedding** | 264.6 ms     |
 
+#### Answer Generation Performance
+
+| Model                  | Time to First Token | Total Generation Time |
+| ---------------------- | ------------------- | --------------------- |
+| **openai/gpt-oss-20b** | 1.16 s              | 2.5 s                 |
+
+#### Query Processing Performance (End-to-End)
+
+| Component              | Average Time | Notes                    |
+| ---------------------- | ------------ | ------------------------ |
+| **Query Embedding**    | 149 ms       | Query text to vector     |
+| **Retrieval (All)**    | ~243 ms      | Parallel sparse + dense + graph + image |
+| **Merge Time**         | 48.5 μs      | Result fusion            |
+| **Answer Generation**  | 2.5 s        | LLM response generation  |
+| **Time to First Token**| 1.16 s       | Initial LLM response     |
+| **Total Query Time**   | 3.0 s        | Complete end-to-end (all retrievers) |
+
 ---
 
 ### Performance Summary Table
@@ -126,6 +143,11 @@ Watch the system in action:
 | **Knowledge Graph**    | Chunks/Query | 18.7         |
 | **Text Embedding**     | Generation   | 225.3 ms     |
 | **Image Embedding**    | Generation   | 264.6 ms     |
+| **Query Embedding**    | Generation   | 149 ms       |
+| **Answer Generation**  | Total Time   | 2.5 s        |
+| **Answer Generation**  | Time to First Token | 1.16 s   |
+| **Merge Time**         | Result Fusion| 48.5 μs      |
+| **Query Processing**   | Total Time   | 3.0 s        |
 | **Document Ingestion** | Total Time   | 25.6 s       |
 | **Qdrant Storage**     | Per Vector   | 9.4 ms       |
 | **Elasticsearch**      | Per Document | 19.5 ms      |
@@ -435,7 +457,9 @@ Key metrics tracked:
 
 - Retrieval latency by type (sparse, dense, graph, image)
 - Relevance scores per retrieval method
-- Embedding generation times
+- Embedding generation times (query and document)
+- Answer generation performance (time to first token, total generation time)
+- Query processing end-to-end latency
 - Document ingestion performance
 - Knowledge graph query performance
 
